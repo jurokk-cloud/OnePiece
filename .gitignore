@@ -12,3 +12,8 @@ build/
 .streamlit/
 *.executed.ipynb
 .DS_Store
+
+# harness runtime artifacts
+.harness/eval_feedback/
+.harness/progress.md
+.harness/plans/

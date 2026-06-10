@@ -59,7 +59,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if not args.skip_docs:
         require_module("sphinx", "python -m pip install -e '.[docs]'")
-        run([sys.executable, "-m", "sphinx", "-b", "html", "docs/source", "docs/build/html"], env=env)
+        run([sys.executable, "-m", "sphinx", "-b", "html", "-W", "docs/source", "docs/build/html"], env=env)
 
     if not args.skip_build:
         require_module("build", "python -m pip install -e '.[release]'")
