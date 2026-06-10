@@ -1,12 +1,9 @@
-# Tutorial: Install, Launch, And Use onepiece-studio
+# Quickstart: Launch onepiece-studio And Explore A Dataset
+
+This page takes you from a fresh install to your first adsorption analysis
+using the bundled tutorial dataset. No code and no input files are required.
 
 ## 1. Install The Package
-
-For backend-only Python workflows:
-
-```bash
-pip install onepiece
-```
 
 For the full UI workbench:
 
@@ -14,32 +11,45 @@ For the full UI workbench:
 pip install onepiece-studio
 ```
 
-For development in a local checkout:
+For backend-only Python workflows (no UI):
 
 ```bash
-pip install -e .[dev]
+pip install onepiece
 ```
 
-## 2. Run The Built-In Package QA
+If you work in notebooks rather than the app, switch to
+[API and CLI usage](api_usage.md) after this page.
 
-The package ships with a bundled Catalysis-Hub reference dataset and a
-self-test command.
-
-Run:
+## 2. Launch The App
 
 ```bash
-onepiece-studio qa
+onepiece-studio
 ```
 
-This verifies that:
+The app opens in your browser (Streamlit prints the local URL, usually
+`http://localhost:8501`) and shows the **welcome page** with three ways in:
 
-- the packaged reference dataset is present
-- the backend can read the HDF file
-- Catalysis-Hub adsorption energies can be reconstructed
-- the reconstructed values match the stored reaction energies to numerical
-  precision
+- **New here?** — one button that opens the bundled Catalysis-Hub tutorial
+  dataset. Nothing to download or configure.
+- **Open your data** — enter the path to a local pandas HDF file (plus its
+  HDF key, `df` by default) or upload an `.hdf`/`.h5` file.
+- **Recent files** — datasets you opened before, one click to reopen.
 
-Typical successful output looks like:
+For this quickstart, click **Open the tutorial dataset**. If you want to
+skip the welcome page on later launches, `onepiece-studio tutorial` opens
+the same bundled dataset directly.
+
+## 3. Check Your Environment (Optional)
+
+Two self-check commands are available if anything looks off:
+
+```bash
+onepiece-studio doctor    # verifies imports and the bundled dataset
+onepiece-studio qa        # round-trips the bundled Catalysis-Hub dataset
+```
+
+`qa` reconstructs adsorption energies from the bundled dataset and compares
+them to the stored reaction energies. A healthy install reports:
 
 ```text
 [PASS] catalysis-hub self-test
@@ -48,88 +58,76 @@ Typical successful output looks like:
 - computed_adsorption_rows: 9
 ```
 
-## 3. Launch The UI
+If either command fails, see [troubleshooting](troubleshooting.md).
 
-### Bundled Tutorial Dataset
+## 4. Find Your Way Around
 
-```bash
-onepiece-studio tutorial
-```
+Once a dataset is open, the sidebar shows the workbench navigation in four
+sections:
 
-This is the recommended first launch for new catalysis users because it opens a
-known-good bundled adsorption dataset.
+| Section | Pages | What it is for |
+|---|---|---|
+| **Data** | Data | Dataset overview, session data sources, and the column schema |
+| **Explore** | Filter, Records, Visualize | Narrow down rows, inspect them, and plot them |
+| **Analyze** | Adsorption & Barriers, Manage & Export | Adsorption workbench and saving or exporting your work |
+| **Advanced** | Workflow Builder | Reproducible backend DataFrame operations |
 
-### Demo Mode
+The pages share one pipeline: data sources are merged on the **Data** page,
+the **Workflow Builder** derives columns on top of them, and the **Filter**
+page selects the rows that every other page works with. The sidebar always
+shows how many records are currently selected.
 
-```bash
-onepiece-studio demo
-```
-
-### Local HDF Mode
-
-```bash
-onepiece-studio hdf "/path/to/database.hdf" --key df --title "Local Database"
-```
-
-The UI runs locally in the browser through Streamlit. In this project the most
-common address is:
-
-```text
-http://localhost:8503
-```
-
-## 4. Understand The Workflow Model
+## 5. The Workflow Model
 
 OnePiece Studio is designed around a simple idea:
 
 1. a local dataset is loaded into a `pandas.DataFrame`
-2. OnePiece applies scientific DataFrame operations in the backend
-3. OnePiece Studio lets you inspect, filter, visualize, and save that work
+2. the `onepiece` backend applies scientific DataFrame operations
+3. the UI lets you inspect, filter, visualize, and save that work
 
 The UI is not meant to replace scientific thinking. It is meant to make the
 DataFrame workflow reproducible and easier to inspect.
 
-## 5. First-Day Beginner Path
+## 6. First Analysis On The Tutorial Dataset
 
-For a student who is just joining a computational catalysis project, the
-recommended path is:
+With the tutorial dataset open:
 
-1. launch `onepiece-studio tutorial`
-2. open `Data Sources` and note how the bundled example is represented
-3. in `Workflow`, add `Adsorption + Gibbs analysis starter`
-4. go to `Records` and inspect the added `G` and `adsorption_free_energy`
-   columns
-5. go to `Visualize` and start with the `Adsorption analysis` preset
+1. On the **Data** page, expand **Data Sources** to see how the bundled
+   dataset is represented, and expand **Schema** to see which columns are
+   numeric, which contain ASE structures, and which have missing values.
+2. Go to **Advanced → Workflow Builder** and add the
+   `Adsorption + Gibbs analysis starter` recipe. It assigns clean-surface
+   references, derives Gibbs free energies (`G`), and calculates
+   `adsorption_free_energy` where the required references are available.
+3. Go to **Explore → Records** and inspect the new `G` and
+   `adsorption_free_energy` columns.
+4. Go to **Explore → Visualize** and start from a preset such as
+   `Adsorption analysis` to compare candidates.
 
-This sequence keeps the student inside backend-driven DataFrame operations while
-giving them immediate visual feedback.
-
-For a more explicit first-day onboarding page, see:
-
-- [First Day Guide For A Bachelor Student](first_day_student.md)
-- [Load Your First Lab Dataset](load_first_lab_dataset.md)
-
-## 6. Typical First Actions In The UI
-
-### Search And Filter
-
-Use the Controlroom to:
-
-- search by `Name`, `Formula`, dataset, or source path
-- filter by composition, materials-system logic, numeric windows, or row state
-- keep only rows that belong in the active analysis set
+This sequence keeps you inside backend-driven DataFrame operations while
+giving immediate visual feedback.
 
 ```{image} _static/screenshots/records.png
 :alt: OnePiece Studio records view
 :class: screenshot
 ```
 
+## 7. Filter And Visualize
+
+### Filter
+
+Use the **Filter** page (under **Explore**) to:
+
+- search by `Name`, `Formula`, dataset, or source path
+- filter by composition, materials-system logic, numeric windows, or row state
+- keep only rows that belong in the active analysis set
+
+The filtered selection feeds Records, Visualize, and the Analyze pages.
+
 ### Visualize
 
-Use the Visualize tab to build scatter plots and comparison plots from numeric
-columns.
-
-Good first plots are:
+Use the **Visualize** page to build scatter and comparison plots from numeric
+columns. Good first plots are:
 
 - energy versus composition
 - formation energy versus surface area
@@ -137,51 +135,39 @@ Good first plots are:
 - quality metrics such as `fmax`
 
 If you are working with ASE/VASP-enriched adsorption datasets, the most useful
-recommended views are documented in:
-
-- [Recommended Analysis Views](recommended_analysis_views.md)
+views are documented in
+[Recommended Analysis Views](recommended_analysis_views.md).
 
 ```{image} _static/screenshots/visualize.png
 :alt: OnePiece Studio visualization view
 :class: screenshot
 ```
 
-### Inspect The Schema
+### Schema
 
-Before a workflow becomes large, use the Schema tab to confirm:
-
-- which columns are numeric
-- which columns are object-like
-- which columns contain ASE structures
-- which columns contain missing values
+Before a workflow becomes large, use the **Schema** expander on the **Data**
+page to confirm which columns are numeric, object-like, structure-bearing, or
+incomplete.
 
 ```{image} _static/screenshots/schema.png
 :alt: OnePiece Studio schema view
 :class: screenshot
 ```
 
-## 7. Work With Scientific State, Not Just Tables
+## 8. Work With Scientific State, Not Just Tables
 
-The package supports:
+The workbench supports workflow operations, saved views, source blocks,
+row-state curation, workbook edits, and project save/load — found on the
+**Analyze** pages (**Adsorption & Barriers**, **Manage & Export**) and in the
+**Workflow Builder**. This is what turns the software from a passive table
+viewer into a real local scientific workbench.
 
-- workflow operations
-- saved views
-- source blocks
-- row-state curation
-- workbook edits
-- project save/load
+## 9. Where To Go Next
 
-This is what turns the software from a passive table viewer into a real local
-scientific workbench.
-
-## 8. Use The Existing Dataset Tutorials As Worked Examples
-
-The package docs still include Cu/Ga-oriented pages because they are useful as
-worked scientific examples:
-
-- how phase-like analysis columns are interpreted
-- how structure, energy, and provenance coexist in one DataFrame
-- how OnePiece Studio maps domain-specific columns into useful views
-
-Those pages are best read as examples of how to shape your own local dataset
-for the workbench.
+- [Load Your First Lab Dataset](load_first_lab_dataset.md) — open your own
+  HDF file from the welcome page and shape it for the workbench
+- [First Day Guide For A Bachelor Student](first_day_student.md) — a slower
+  onboarding path with the scientific context
+- The Cu/Ga-oriented worked examples on the concepts track show how
+  structure, energy, and provenance coexist in one DataFrame and how the
+  workbench maps domain-specific columns into useful views
