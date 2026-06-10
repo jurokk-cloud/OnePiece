@@ -12,84 +12,88 @@ It combines:
 The package is designed for local HDF datasets, ASE structures, adsorption
 workflows, reaction-path analysis, and reproducible scientific curation.
 
-## What This Site Covers
+## Quick Launch
 
-- how to install and launch the package
-- how to run the built-in package QA
-- how to use the Python API and CLI
-- how the UI works with `pandas` and ASE
-- how to think about the package if ASE is already your native tool
-- how the package is architected internally
-- how to adapt the workbench to local scientific datasets
-
-```{toctree}
-:maxdepth: 2
-:caption: Getting Started
-
-tutorial
-first_day_student
-load_first_lab_dataset
-troubleshooting
-api_usage
-quality_control
-changelog
-pandas_ase
+```bash
+pip install onepiece-studio
+onepiece-studio
 ```
 
-```{toctree}
-:maxdepth: 2
-:caption: ASE-Focused Guide
-
-ase_user_guide
-ase_structures_in_dataframes
-vasp_charge_and_dos
-xarray_vasp
-ase_to_ui_workflow_mapping
-recommended_analysis_views
-```
-
-```{toctree}
-:maxdepth: 2
-:caption: Package And Product Design
-
-materials_workbench_design
-column_review
-logos
-onepiece_studio_architecture
-onepiece_backend_api
-release_workflow
-```
-
-```{toctree}
-:maxdepth: 2
-:caption: Scientific Workflows And Examples
-
-visualization_recipes
-catalysis_hub_worked_example
-cuga_worked_example
-image_columns
-```
-
-## First Look
-
-Start the local demo:
+The welcome page lets you open the bundled tutorial dataset, a local HDF
+file, or a recent file. To jump straight into the tutorial dataset:
 
 ```bash
 onepiece-studio tutorial
 ```
 
-Or open a local HDF file:
+## Choose Your Path
 
-```bash
-onepiece-studio hdf "/path/to/database.hdf" --key df --title "Local Database"
+The documentation is organized into three tracks. Pick the one that matches
+how you want to work today.
+
+### I have a dataset — show me
+
+You have an HDF file (or want to try the bundled one) and want to explore it
+in the app without writing code. Start with the
+[tutorial](tutorial.md), then load
+[your own lab dataset](load_first_lab_dataset.md).
+
+```{toctree}
+:maxdepth: 2
+:caption: "Use the App (UI Track)"
+
+tutorial
+load_first_lab_dataset
+image_columns
+recommended_analysis_views
+quality_control
+troubleshooting
 ```
 
-Run the bundled package self-test:
+### I write notebooks
 
-```bash
-onepiece-studio qa
-onepiece-studio doctor
+You work in Python — pandas, ASE, maybe xarray — and want the `onepiece`
+backend as a library, with the UI as an optional companion. Start with
+[API and CLI usage](api_usage.md).
+
+```{toctree}
+:maxdepth: 2
+:caption: "Work in Python (Notebook Track)"
+
+api_usage
+pandas_ase
+ase_user_guide
+ase_structures_in_dataframes
+ase_to_ui_workflow_mapping
+vasp_charge_and_dos
+xarray_vasp
+visualization_recipes
 ```
+
+### I'm starting my thesis
+
+You just joined a computational chemistry or catalysis group and want the
+concepts, worked examples, and project background — not just tool commands.
+Start with the [first day guide](first_day_student.md), then walk through the
+worked examples.
+
+```{toctree}
+:maxdepth: 2
+:caption: "Learn the Concepts (Thesis Track)"
+
+first_day_student
+catalysis_hub_worked_example
+cuga_worked_example
+materials_workbench_design
+column_review
+onepiece_studio_architecture
+onepiece_backend_api
+release_workflow
+logos
+changelog
+```
+
+## First Look
 
 The screenshots below were captured from the running OnePiece Studio UI.
 
