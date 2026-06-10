@@ -117,17 +117,10 @@ without forcing the student to understand every implementation detail at once.
 
 ## If Something Fails
 
-Use this recovery path:
-
-```bash
-pip install --upgrade pip
-pip install onepiece-studio
-onepiece-studio doctor
-onepiece-studio qa
-```
-
-If that still fails, keep the exact terminal output. For beginners, the exact
-error message is usually more useful than a screenshot of the browser alone.
+Follow the recovery path and the error-specific fixes in
+[Troubleshooting](troubleshooting.md). Keep the exact terminal output: for
+beginners, the exact error message is usually more useful than a screenshot
+of the browser alone.
 
 ## What The Supervisor Or PhD Student Should Provide
 

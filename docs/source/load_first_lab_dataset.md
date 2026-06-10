@@ -100,14 +100,10 @@ Do not start with a complex publication plot.
 
 ## 8. If Loading Fails
 
-Most common reasons:
-
-- wrong file path
-- wrong HDF key
-- missing `tables`
-- missing `sympy`
-- dataset does not contain the expected table
-- object columns are present but structures were not serialized correctly
+The common causes (wrong path, wrong HDF key, missing optional
+dependencies, legacy NumPy-1 pickles) and their fixes are collected in
+[Troubleshooting](troubleshooting.md). Match the error message you see to
+the cases there.
 
 ## 9. If The Dataset Loads But Analysis Fails
 

@@ -82,4 +82,5 @@ df = source.load()
 ```
 
 Use direct `pd.read_hdf` when your environment matches the writer environment. Use `HDFSource` when
-you want the UI's compatibility handling.
+you want the UI's compatibility handling. If a legacy file still fails to load, see
+[Troubleshooting](troubleshooting.md#legacy-numpy-1-pickles).
