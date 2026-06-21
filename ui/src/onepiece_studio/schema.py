@@ -1,8 +1,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import StrEnum
 from typing import Any
+
+try:  # StrEnum is only available on Python 3.11+
+    from enum import StrEnum
+except ImportError:  # pragma: no cover - Python 3.10 fallback
+    from enum import Enum
+
+    class StrEnum(str, Enum):  # type: ignore[no-redef]
+        """Minimal StrEnum backport for Python 3.10."""
 
 import pandas as pd
 
