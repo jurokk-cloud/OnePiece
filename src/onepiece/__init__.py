@@ -55,9 +55,12 @@ from onepiece.adsorption import (
     adsorption_view,
     assign_references_before_merge,
 )
-from onepiece.ase_analysis import plot_row_metric_3d, plot_structure_value_3d, save_dataframe_metric_plots_3d
+from onepiece.ase_analysis import (
+    plot_row_metric_3d,
+    plot_structure_value_3d,
+    save_dataframe_metric_plots_3d,
+)
 from onepiece.dftdataframe_import import crawl_root_to_frame
-from onepiece.vasp import add_atomic_magnetic_moment_descriptors, add_atomic_reference_difference_descriptors
 from onepiece.ir import plot_adsorption_energy_vs_frequency
 from onepiece.provenance import (
     ReferenceScheme,
@@ -70,6 +73,10 @@ from onepiece.qa import bundled_catalysis_hub_dataset
 from onepiece.sources import read_dataset_path, read_hdf_path
 from onepiece.storage import load_dataset, save_dataset
 from onepiece.thermo import add_gibbs_free_energy, adsorbate_free_energy, gas_free_energy
+from onepiece.vasp import (
+    add_atomic_magnetic_moment_descriptors,
+    add_atomic_reference_difference_descriptors,
+)
 
 __all__ = [
     # Load data

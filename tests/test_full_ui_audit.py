@@ -5,8 +5,6 @@ from pathlib import Path
 
 import pandas as pd
 from ase import Atoms
-
-from onepiece.automation import apply_curation_rules
 from onepiece_studio.ui.controlroom import _apply_controlroom_filters
 from onepiece_studio.ui.data_management import _build_project_payload, _restore_project_payload
 from onepiece_studio.ui.data_sources import (
@@ -17,6 +15,8 @@ from onepiece_studio.ui.data_sources import (
 )
 from onepiece_studio.ui.workbook import EDIT_STATE_KEY, apply_session_edits
 from onepiece_studio.ui.workflow_builder import _apply_operation, _workflow_gas_reference_values
+
+from onepiece.automation import apply_curation_rules
 
 
 class DummyStreamlit:
