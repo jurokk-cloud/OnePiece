@@ -3,7 +3,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import pandas as pd
-
 from onepiece_studio.adapters import DataFrameSource, HDFSource
 from onepiece_studio.demo import empty_source, local_default_source
 

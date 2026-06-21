@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import os
-
 import sys
 from pathlib import Path
 
@@ -10,10 +9,9 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+from onepiece_studio import DataFrameSource, OnePieceStudioConfig
 from onepiece_studio.materials_columns import enrich_materials_dataframe
 from onepiece_studio.ui.streamlit_app import run_app
-
-from onepiece_studio import DataFrameSource, OnePieceStudioConfig
 
 DATA_ROOT = Path(os.environ.get("ONEPIECE_DATA_ROOT", "data/surface_alloys"))
 

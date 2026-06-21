@@ -7,6 +7,7 @@ from ase.build import bulk
 
 from onepiece import apply_operation
 from onepiece.ase_analysis import (
+    CoordinationEnvironment,
     DoscarData,
     add_ase_analysis_descriptors,
     adsorbate_orientation_angle,
@@ -15,7 +16,6 @@ from onepiece.ase_analysis import (
     compare_structures_rmsd,
     compute_d_band_center,
     compute_d_band_filling,
-    CoordinationEnvironment,
     coordination_environment,
     coordination_numbers,
     detect_adsorbate_desorption,
@@ -23,9 +23,9 @@ from onepiece.ase_analysis import (
     detect_overlapping_atoms,
     detect_unphysical_bonds,
     generalized_coordination_numbers,
-    plot_structure_value_3d,
     identify_surface_atom_indices,
     infer_atomic_layers,
+    plot_structure_value_3d,
     reaction_path_geometry_summary,
     slab_thickness,
     summarize_charge_transfer_by_layer,
