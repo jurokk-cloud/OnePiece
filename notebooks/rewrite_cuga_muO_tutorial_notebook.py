@@ -196,7 +196,9 @@ Formeln mit \(T\), \(p_{\mathrm{H_2O}}\) und \(p_{\mathrm{H_2}}\).
         ),
         code(
             """
-DATA_DIR = Path("/Users/dk2994/Desktop/Uni/Journal/Thesis/Notebooks/Surface Alloys")
+import os
+
+DATA_DIR = Path(os.environ.get("ONEPIECE_DATA_ROOT", "data/surface_alloys"))
 BULK_OXIDE_HDF = DATA_DIR / "CuGabulk_oxide.hdf"
 
 raw = pd.read_hdf(BULK_OXIDE_HDF, key="df")

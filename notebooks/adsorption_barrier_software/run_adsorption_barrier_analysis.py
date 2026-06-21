@@ -26,7 +26,7 @@ PROJECT_ROOT = ROOT.parents[1]
 OUTPUT_ROOT = ROOT / "outputs"
 OUTPUT_ROOT.mkdir(parents=True, exist_ok=True)
 
-DATA_ROOT = Path("/Users/dk2994/Desktop/Uni/Journal/Thesis/Notebooks/Database/Chapter6")
+DATA_ROOT = Path(os.environ.get("ONEPIECE_DATA_ROOT", "data/chapter6"))
 HDF_FILES = {
     "CaO-slabs": DATA_ROOT / "CaO-slabs.hdf",
     "Ga2O3-slabs": DATA_ROOT / "Ga2O3-slabs.hdf",

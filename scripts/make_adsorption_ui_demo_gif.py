@@ -212,7 +212,7 @@ def main() -> None:
             adsorption_frame,
             title="2. Gasreferenzen werden automatisch erkannt",
             body=(
-                "PFUI findet CO, CH3OH und H2 direkt in den geladenen Datensaetzen. "
+                "OnePiece Studio findet CO, CH3OH und H2 direkt in den geladenen Datensaetzen. "
                 "Diese Werte koennen in der UI frei ueberschrieben werden; die Adsorptionsenergie "
                 "wird danach sofort neu berechnet."
             ),

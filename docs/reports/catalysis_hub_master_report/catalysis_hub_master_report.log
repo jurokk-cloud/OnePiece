@@ -2,10 +2,10 @@ This is XeTeX, Version 3.141592653-2.6-0.999996 (TeX Live 2024/MacPorts 2024.706
 entering extended mode
  restricted \write18 enabled.
  %&-line parsing enabled.
-**/Users/dk2994/Desktop/git/PFUI/docs/reports/catalysis_hub_master_report/catal
+**/OnePiece/docs/reports/catalysis_hub_master_report/catal
 ysis_hub_master_report.tex
 
-(/Users/dk2994/Desktop/git/PFUI/docs/reports/catalysis_hub_master_report/cataly
+(/OnePiece/docs/reports/catalysis_hub_master_report/cataly
 sis_hub_master_report.tex
 LaTeX2e <2023-11-01> patch level 1
 L3 programming layer <2024-02-20>
@@ -301,7 +301,7 @@ Package uniquecounter Info: New unique counter `rerunfilecheck' on input line 2
 (/opt/local/share/texmf-texlive/tex/latex/parskip/parskip.sty
 Package: parskip 2021-03-14 v2.0h non-zero parskip adjustments
 )
-(/Users/dk2994/Desktop/git/PFUI/docs/reports/catalysis_hub_master_report/cataly
+(/OnePiece/docs/reports/catalysis_hub_master_report/cataly
 sis_hub_master_report.aux)
 \openout1 = `catalysis_hub_master_report.aux'.
 
@@ -425,9 +425,9 @@ LaTeX Font Info:    Overwriting math alphabet `\mathtt' in version `bold'
 (Font)                  OT1/cmtt/m/n --> TU/lmtt/b/n on input line 11.
 Package hyperref Info: Link coloring OFF on input line 11.
 
-(/Users/dk2994/Desktop/git/PFUI/docs/reports/catalysis_hub_master_report/cataly
+(/OnePiece/docs/reports/catalysis_hub_master_report/cataly
 sis_hub_master_report.out)
-(/Users/dk2994/Desktop/git/PFUI/docs/reports/catalysis_hub_master_report/cataly
+(/OnePiece/docs/reports/catalysis_hub_master_report/cataly
 sis_hub_master_report.out)
 \@outlinefile=\write3
 \openout3 = `catalysis_hub_master_report.out'.
@@ -445,7 +445,7 @@ LaTeX Warning: No \author given.
 
 Overfull \hbox (522.00038pt too wide) in paragraph at lines 14--16
 \TU/lmr/m/n/10.95 implementation details. \TU/lmr/bx/n/10.95 Source file analyz
-ed: \TU/lmtt/m/n/10.95 /Users/dk2994/Desktop/git/PFUI/notebooks/catalysis_hub_t
+ed: \TU/lmtt/m/n/10.95 /OnePiece/notebooks/catalysis_hub_t
 utorial/notebooks/catalysis_hub_tutorial/outputs/catalysis_hub_co2_subset.hdf 
  []
 
@@ -481,23 +481,23 @@ Underfull \hbox (badness 10000) in paragraph at lines 64--64
 \TU/lmr/m/n/10 constructable
  []
 
-File: /Users/dk2994/Desktop/git/PFUI/docs/reports/catalysis_hub_master_report/a
+File: /OnePiece/docs/reports/catalysis_hub_master_report/a
 ssets/figure_06_method_mix.png Graphic file (type bmp)
-</Users/dk2994/Desktop/git/PFUI/docs/reports/catalysis_hub_master_report/assets
+</OnePiece/docs/reports/catalysis_hub_master_report/assets
 /figure_06_method_mix.png>
 
 LaTeX Warning: `h' float specifier changed to `ht'.
 
-File: /Users/dk2994/Desktop/git/PFUI/docs/reports/catalysis_hub_master_report/a
+File: /OnePiece/docs/reports/catalysis_hub_master_report/a
 ssets/figure_01_equation_counts.png Graphic file (type bmp)
-</Users/dk2994/Desktop/git/PFUI/docs/reports/catalysis_hub_master_report/assets
+</OnePiece/docs/reports/catalysis_hub_master_report/assets
 /figure_01_equation_counts.png>
 
 LaTeX Warning: `h' float specifier changed to `ht'.
 
-File: /Users/dk2994/Desktop/git/PFUI/docs/reports/catalysis_hub_master_report/a
+File: /OnePiece/docs/reports/catalysis_hub_master_report/a
 ssets/figure_02_reaction_energy_heatmap.png Graphic file (type bmp)
-</Users/dk2994/Desktop/git/PFUI/docs/reports/catalysis_hub_master_report/assets
+</OnePiece/docs/reports/catalysis_hub_master_report/assets
 /figure_02_reaction_energy_heatmap.png>
 [2]
 
@@ -529,9 +529,9 @@ Underfull \hbox (badness 10000) in paragraph at lines 113--113
 []|\TU/lmr/m/n/10 single-
  []
 
-File: /Users/dk2994/Desktop/git/PFUI/docs/reports/catalysis_hub_master_report/a
+File: /OnePiece/docs/reports/catalysis_hub_master_report/a
 ssets/figure_03_co2_adsorption.png Graphic file (type bmp)
-</Users/dk2994/Desktop/git/PFUI/docs/reports/catalysis_hub_master_report/assets
+</OnePiece/docs/reports/catalysis_hub_master_report/assets
 /figure_03_co2_adsorption.png>
 [3]
 
@@ -867,9 +867,9 @@ Overfull \vbox (488.0037pt too high) has occurred while \output is active []
 
 
 [6]
-File: /Users/dk2994/Desktop/git/PFUI/docs/reports/catalysis_hub_master_report/a
+File: /OnePiece/docs/reports/catalysis_hub_master_report/a
 ssets/figure_04_hcoo_vs_cooh.png Graphic file (type bmp)
-</Users/dk2994/Desktop/git/PFUI/docs/reports/catalysis_hub_master_report/assets
+</OnePiece/docs/reports/catalysis_hub_master_report/assets
 /figure_04_hcoo_vs_cooh.png>
 
 Overfull \hbox (14.8555pt too wide) in paragraph at lines 188--188
@@ -881,9 +881,9 @@ Overfull \hbox (58.65663pt too wide) in paragraph at lines 188--189
 []|\TU/lmr/m/n/10 HCOO_minus_COOH_eV| 
  []
 
-File: /Users/dk2994/Desktop/git/PFUI/docs/reports/catalysis_hub_master_report/a
+File: /OnePiece/docs/reports/catalysis_hub_master_report/a
 ssets/figure_05_barriers.png Graphic file (type bmp)
-</Users/dk2994/Desktop/git/PFUI/docs/reports/catalysis_hub_master_report/assets
+</OnePiece/docs/reports/catalysis_hub_master_report/assets
 /figure_05_barriers.png>
 
 LaTeX Warning: `h' float specifier changed to `ht'.
@@ -1289,7 +1289,7 @@ Underfull \hbox (badness 10000) in paragraph at lines 301--301
  []
 
 [10] [11] [12]
-(/Users/dk2994/Desktop/git/PFUI/docs/reports/catalysis_hub_master_report/cataly
+(/OnePiece/docs/reports/catalysis_hub_master_report/cataly
 sis_hub_master_report.aux)
  ***********
 LaTeX2e <2023-11-01> patch level 1
@@ -1308,5 +1308,5 @@ Here is how much of TeX's memory you used:
  430 hyphenation exceptions out of 8191
  79i,8n,93p,619b,416s stack positions out of 10000i,1000n,20000p,200000b,200000s
 
-Output written on /Users/dk2994/Desktop/git/PFUI/docs/reports/catalysis_hub_mas
+Output written on /OnePiece/docs/reports/catalysis_hub_mas
 ter_report/catalysis_hub_master_report.pdf (12 pages).

@@ -210,6 +210,14 @@ def plot_structure_value_3d(
     vmin: float | None = None,
     vmax: float | None = None,
 ):
+    """Plot per-atom ``values`` as a 3D scatter over an ASE structure.
+
+    .. code-block:: python
+
+        from onepiece import plot_structure_value_3d
+
+        fig = plot_structure_value_3d(atoms, gcn_values, title="GCN")
+    """
     try:
         import matplotlib.cm as cm
         import matplotlib.colors as mcolors
@@ -232,7 +240,7 @@ def plot_structure_value_3d(
         lower -= 0.5
         upper += 0.5
     normalize = mcolors.Normalize(vmin=lower, vmax=upper)
-    colormap = cm.get_cmap(cmap)
+    colormap = plt.get_cmap(cmap)
 
     fig = plt.figure()
     ax = fig.add_subplot(projection="3d", title=title)
@@ -283,6 +291,14 @@ def plot_row_metric_3d(
     vmin: float | None = None,
     vmax: float | None = None,
 ):
+    """Plot a per-atom metric column for a single dataframe row in 3D.
+
+    .. code-block:: python
+
+        from onepiece import plot_row_metric_3d
+
+        fig = plot_row_metric_3d(frame.iloc[0], "atomic_charge_e")
+    """
     atoms = row.get(structure_column)
     if atoms is None or atoms.__class__.__name__ != "Atoms":
         raise ValueError(f"Row does not contain an ASE Atoms object in column '{structure_column}'.")
@@ -316,6 +332,16 @@ def save_dataframe_metric_plots_3d(
     size: float = 400.0,
     cmap: str = "nipy_spectral",
 ) -> pd.DataFrame:
+    """Save a 3D metric plot per metric column and return an index frame.
+
+    .. code-block:: python
+
+        from onepiece import save_dataframe_metric_plots_3d
+
+        index = save_dataframe_metric_plots_3d(
+            frame, ["atomic_charge_e"], output_dir="plots"
+        )
+    """
     try:
         import matplotlib.pyplot as plt
     except Exception as exc:  # pragma: no cover

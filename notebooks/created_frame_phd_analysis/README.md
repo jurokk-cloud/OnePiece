@@ -1,8 +1,10 @@
 # created_frame.hdf analysis notebooks
 
-This notebook series analyzes `/Users/dk2994/Desktop/Uni/scripts/created_frame.hdf`
-with the local `DFTDataFrame` package as the available OnePiece-compatible
-analysis layer.
+This notebook series analyzes the `created_frame.hdf` table located at
+`$ONEPIECE_DATA_ROOT/created_frame.hdf` (set `ONEPIECE_DATA_ROOT` to the
+directory holding the file; it defaults to `data`). The notebooks use the local
+`DFTDataFrame` package as the available OnePiece-compatible analysis layer,
+discovered through the `DFTDATAFRAME_SRC` environment variable.
 
 Notebooks:
 

@@ -325,14 +325,34 @@ validate, document, and test.
 ## Repository layout
 
 ```text
-PFUI/
+OnePiece/
 ├── pyproject.toml            # onepiece backend package
 ├── ui/pyproject.toml         # onepiece-studio frontend package
 ├── src/onepiece/             # backend code
 ├── ui/src/onepiece_studio/   # frontend code
 ├── tests/                    # package tests
 ├── docs/                     # Sphinx documentation and reports
-└── notebooks/                # worked examples and analysis notebooks
+├── examples/                 # runnable Streamlit example apps
+├── scripts/                  # maintenance and figure-generation scripts
+├── notebooks/                # worked examples and analysis notebooks
+└── reports/                  # generated analysis reports
+```
+
+### Dataset paths and environment variables
+
+Example apps, scripts, and tutorial notebooks resolve dataset and project
+locations from environment variables (each with a repo-relative fallback), so
+no machine-specific paths are hardcoded:
+
+| Variable | Purpose | Default |
+| --- | --- | --- |
+| `ONEPIECE_DATA_ROOT` | directory holding the input HDF datasets | `data/...` |
+| `ONEPIECE_PROJECT_ROOT` | repository root used to place generated outputs | current working directory |
+| `DFTDATAFRAME_SRC` | optional path to a local `DFTDataFrame` checkout | `src` |
+
+```bash
+export ONEPIECE_DATA_ROOT="/path/to/your/hdf_datasets"
+python examples/cuga_full_streamlit.py
 ```
 
 ## Package architecture

@@ -171,7 +171,7 @@ def main() -> None:
     launch_script = DESKTOP_PROJECT_DIR / "launch_chapter6_ui.command"
     launch_script.write_text(
         "#!/bin/zsh\n"
-        "cd /Users/dk2994/Desktop/git/PFUI\n"
+        f"cd {ROOT}\n"
         "python3 -m onepiece_studio.cli hdf examples/chapter6_adsorption_demo.hdf\n",
         encoding="utf-8",
     )

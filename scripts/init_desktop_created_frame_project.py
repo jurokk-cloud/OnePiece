@@ -140,7 +140,7 @@ def main() -> None:
     launch_script.write_text(
         "#!/bin/zsh\n"
         "export STREAMLIT_BROWSER_GATHER_USAGE_STATS=false\n"
-        "cd /Users/dk2994/Desktop/git/PFUI\n"
+        f"cd {ROOT}\n"
         "python3 -m onepiece_studio.cli hdf \"$ONEPIECE_STUDIO_DEFAULT_HDF\"\n",
         encoding="utf-8",
     )

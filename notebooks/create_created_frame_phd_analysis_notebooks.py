@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+
 from pathlib import Path
 
 import nbformat as nbf
@@ -7,8 +9,8 @@ import nbformat as nbf
 
 ROOT = Path(__file__).resolve().parent
 OUT = ROOT / "created_frame_phd_analysis"
-DATA_PATH = Path("/Users/dk2994/Desktop/Uni/scripts/created_frame.hdf")
-DFTDATAFRAME_SRC = Path("/Users/dk2994/Desktop/git/DFTDataFrame/src")
+DATA_PATH = Path(os.environ.get("ONEPIECE_DATA_ROOT", "data")) / "created_frame.hdf"
+DFTDATAFRAME_SRC = Path(os.environ.get("DFTDATAFRAME_SRC", "src"))
 
 
 def md(text: str):
@@ -71,7 +73,7 @@ def load_onepiece_hdf(path=DATA_PATH, key="df"):
     try:
         return OP.pd.read_hdf(path, key=key).copy()
     except Exception as original_error:
-        helper_python = Path("/Users/dk2994/opt/anaconda3/bin/python")
+        helper_python = Path(sys.executable)
         if not helper_python.exists():
             raise original_error
         output = Path(tempfile.NamedTemporaryFile(delete=False, suffix=".pkl", prefix="created_frame_").name)
@@ -2580,7 +2582,8 @@ def write_notebooks() -> list[Path]:
     readme.write_text(
         (
             "# created_frame.hdf analysis notebooks\n\n"
-            "This notebook series analyzes `/Users/dk2994/Desktop/Uni/scripts/created_frame.hdf`\n"
+            "This notebook series analyzes the `created_frame.hdf` table referenced by\n"
+            "`$ONEPIECE_DATA_ROOT/created_frame.hdf`\n"
             "with the local `DFTDataFrame` package as the available OnePiece-compatible\n"
             "analysis layer.\n\n"
             "Notebooks:\n\n"

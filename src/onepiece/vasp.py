@@ -279,6 +279,15 @@ def add_atomic_magnetic_moment_descriptors(
     *,
     structure_column: str = "struc",
 ) -> pd.DataFrame:
+    """Add per-atom and total magnetic-moment descriptors from structures.
+
+    .. code-block:: python
+
+        from onepiece import add_atomic_magnetic_moment_descriptors
+
+        frame = add_atomic_magnetic_moment_descriptors(frame)
+        frame[["atomic_magnetic_moments", "total_magnetic_moment"]]
+    """
     df = ensure_name_index(frame)
     if "atomic_magnetic_moments" not in df.columns:
         df["atomic_magnetic_moments"] = None
@@ -506,6 +515,15 @@ def add_atomic_reference_difference_descriptors(
     acf_filename: str = "ACF.dat",
     filename: str = "CHGCAR",
 ) -> pd.DataFrame:
+    """Add per-atom charge differences versus per-element valence references.
+
+    .. code-block:: python
+
+        from onepiece import add_atomic_reference_difference_descriptors
+
+        frame = add_atomic_reference_difference_descriptors(frame)
+        frame["atomic_charge_delta_vs_valence_ref_e"]
+    """
     return add_adsorbate_charge_descriptors(
         frame,
         charge_source=charge_source,

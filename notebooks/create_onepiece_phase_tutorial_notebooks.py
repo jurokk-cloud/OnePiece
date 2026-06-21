@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+
 from pathlib import Path
 
 import nbformat as nbf
@@ -8,9 +10,7 @@ import nbformat as nbf
 ROOT = Path(__file__).resolve().parent
 PROJECT_ROOT = ROOT.parent
 OUT = ROOT / "onepiece_phase_tutorial"
-DATA_ROOT = Path(
-    "/Users/dk2994/Desktop/Uni/Journal/Thesis/Notebooks/Surface Alloys"
-)
+DATA_ROOT = Path(os.environ.get("ONEPIECE_DATA_ROOT", "data/surface_alloys"))
 OUTPUT_ROOT = ROOT / "phase_diagram_outputs"
 
 
