@@ -10,9 +10,8 @@ updated whenever a new version is prepared for publication.
 
 The current documented release is:
 
-- `1.0.0` — marks the first stable release with cleaned release engineering,
-  stricter package boundaries, security/lint hooks, and verified backend/UI
-  build artifacts.
+- `1.0.1` — updates backend and frontend packaging metadata for the current
+  patch release while preserving the stable `1.x` package boundary.
 
 ## What Belongs In The Changelog
 

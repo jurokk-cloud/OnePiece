@@ -25,6 +25,7 @@ from onepiece.automation import (
 )
 from onepiece.dftdataframe_import import add_input_parameter_checks
 from onepiece.ir import add_ir_peak_matches
+from onepiece.provenance import workflow_activity
 from onepiece.thermo import add_gibbs_free_energy
 from onepiece.vasp import (
     add_adsorbate_charge_descriptors,
@@ -36,19 +37,52 @@ from onepiece.vasp import (
 class WorkflowResult:
     dataframe: pd.DataFrame
     messages: list[str]
+    audit_log: list[dict[str, Any]]
 
 
 def apply_operations(dataframe: pd.DataFrame, operations: list[dict[str, Any]]) -> WorkflowResult:
     active = dataframe.copy()
     messages: list[str] = []
+    audit_log: list[dict[str, Any]] = []
     for index, operation in enumerate(operations, start=1):
         if not operation.get("enabled", True):
             continue
+        before = active
+        input_entity = f"dataframe:step-{index - 1}"
+        output_entity = f"dataframe:step-{index}"
         try:
             active = apply_operation(active, operation)
+            audit_log.append(
+                workflow_activity(
+                    step_index=index,
+                    operation=operation,
+                    input_entity=input_entity,
+                    output_entity=output_entity,
+                    status="ok",
+                    rows_before=len(before),
+                    rows_after=len(active),
+                    columns_before=[str(column) for column in before.columns],
+                    columns_after=[str(column) for column in active.columns],
+                )
+            )
         except Exception as exc:
-            messages.append(f"Step {index} failed: {operation.get('label', operation.get('kind'))}: {exc}")
-    return WorkflowResult(dataframe=active, messages=messages)
+            error = f"Step {index} failed: {operation.get('label', operation.get('kind'))}: {exc}"
+            messages.append(error)
+            audit_log.append(
+                workflow_activity(
+                    step_index=index,
+                    operation=operation,
+                    input_entity=input_entity,
+                    output_entity=output_entity,
+                    status="failed",
+                    rows_before=len(before),
+                    rows_after=len(before),
+                    columns_before=[str(column) for column in before.columns],
+                    columns_after=[str(column) for column in before.columns],
+                    error=error,
+                )
+            )
+    return WorkflowResult(dataframe=active, messages=messages, audit_log=audit_log)
 
 
 def apply_operation(dataframe: pd.DataFrame, operation: dict[str, Any]) -> pd.DataFrame:

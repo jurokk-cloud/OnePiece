@@ -68,6 +68,7 @@ Typical direct imports:
 
 ```python
 from onepiece import (
+    ReferenceScheme,
     DatasetQuery,
     apply_operations,
     assign_surface_references,
@@ -78,7 +79,9 @@ from onepiece import (
     integrate_projected_dos,
     read_chgcar,
     read_doscar,
+    ro_crate_metadata,
     run_catalysis_hub_self_test,
+    save_dataset,
 )
 ```
 
@@ -96,6 +99,42 @@ result = apply_operations(
 )
 
 active = result.dataframe
+```
+
+### Save A FAIR Dataset
+
+```python
+from onepiece import ReferenceScheme, save_dataset
+from onepiece.storage import ensure_storage_layout, resolve_storage_config
+
+scheme = ReferenceScheme.gas_phase(
+    name="CO2_H2_H2O",
+    gas_references_eV={"CO2": -22.1, "H2": -6.8, "H2O": -14.2},
+)
+
+config = ensure_storage_layout(resolve_storage_config(".onepiece"))
+manifest_path = save_dataset(
+    active,
+    dataset_id="my-catalysis-dataset",
+    config=config,
+    source_path="created_frame.hdf",
+    reference_scheme=scheme,
+    workflow_audit_log=result.audit_log,
+    metadata={
+        "license": "CC-BY-4.0",
+        "citation": "Replace with article or dataset citation.",
+    },
+)
+```
+
+Audit and export the saved dataset:
+
+```bash
+onepiece-studio fair-audit .onepiece/workspace/my-catalysis-dataset \
+  --require-reference-scheme \
+  --require-publication-metadata
+
+onepiece-studio ro-crate .onepiece/workspace/my-catalysis-dataset
 ```
 
 ### Query A Dataset

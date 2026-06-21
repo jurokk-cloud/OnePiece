@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+
 import re
 import sys
 from pathlib import Path
@@ -22,7 +24,7 @@ ROOT = Path(__file__).resolve().parent
 OUTPUT_ROOT = ROOT / "outputs"
 OUTPUT_ROOT.mkdir(parents=True, exist_ok=True)
 
-DATA_ROOT = Path("/Users/dk2994/Desktop/Uni/Journal/Thesis/Notebooks/Database/Chapter6")
+DATA_ROOT = Path(os.environ.get("ONEPIECE_DATA_ROOT", "data/chapter6"))
 
 HDF_FILES = {
     "CaO-slabs": DATA_ROOT / "CaO-slabs.hdf",

@@ -16,6 +16,7 @@ import pandas as pd
 from ase import Atoms
 from ase.io import read
 
+from onepiece._compat import trapezoid
 from onepiece.adsorption import add_element_count_columns
 from onepiece.frame_utils import ensure_name_index
 from onepiece.storage import cache_key_for_paths, read_cache_payload, write_cache_payload
@@ -96,20 +97,20 @@ def crawl_root_to_frame(
         A dataframe with structural metadata, element counts, optional
         thermochemistry, and optional electronic summaries.
 
-    Example
-    -------
-    ```python
-    from onepiece import crawl_root_to_frame
+    Examples
+    --------
+    .. code-block:: python
 
-    frame = crawl_root_to_frame(
-        "path/to/calculations",
-        calc_file="final.traj",
-        thermo_filename="out.txt",
-        read_electronic_files=True,
-        electronic_workers=8,
-        query="Cu > 0 and E < -10",
-    )
-    ```
+        from onepiece import crawl_root_to_frame
+
+        frame = crawl_root_to_frame(
+            "path/to/calculations",
+            calc_file="final.traj",
+            thermo_filename="out.txt",
+            read_electronic_files=True,
+            electronic_workers=8,
+            query="Cu > 0 and E < -10",
+        )
     """
     root_path = Path(root).expanduser()
     active_thermo_filename = _active_thermo_filename(
@@ -194,17 +195,17 @@ def crawl_root_to_hdf(
     pathlib.Path
         The expanded output HDF path that was written.
 
-    Example
-    -------
-    ```python
-    from onepiece import crawl_root_to_hdf
+    Examples
+    --------
+    .. code-block:: python
 
-    output = crawl_root_to_hdf(
-        "path/to/calculations",
-        "path/to/created_frame.hdf",
-        read_electronic_files=False,
-    )
-    ```
+        from onepiece.dftdataframe_import import crawl_root_to_hdf
+
+        output = crawl_root_to_hdf(
+            "path/to/calculations",
+            "path/to/created_frame.hdf",
+            read_electronic_files=False,
+        )
     """
     frame = crawl_root_to_frame(
         root,
@@ -447,17 +448,18 @@ def enrich_electronic_summaries(
         ``chgcar_read_ok``, ``chgcar_total_integrated_electrons``,
         ``doscar_read_ok``, and ``doscar_total_dos_below_ef``.
 
-    Example
-    -------
-    ```python
-    from onepiece import crawl_root_to_frame, enrich_electronic_summaries
+    Examples
+    --------
+    .. code-block:: python
 
-    base = crawl_root_to_frame(
-        "path/to/calculations",
-        read_electronic_files=False,
-    )
-    enriched = enrich_electronic_summaries(base, workers=12)
-    ```
+        from onepiece import crawl_root_to_frame
+        from onepiece.dftdataframe_import import enrich_electronic_summaries
+
+        base = crawl_root_to_frame(
+            "path/to/calculations",
+            read_electronic_files=False,
+        )
+        enriched = enrich_electronic_summaries(base, workers=12)
     """
     enriched = ensure_name_index(frame)
     if enriched.empty or path_column not in enriched.columns:
@@ -1114,7 +1116,7 @@ def _electronic_summary_from_path(calc_dir: Path, *, verbose: bool) -> dict[str,
             below_ef_mask = energies <= 0.0
             total_signal = total_dos.sum(axis=0) if total_dos.ndim > 1 else total_dos.reshape(-1)
             if below_ef_mask.any():
-                total_below_ef = float(np.trapz(total_signal[below_ef_mask], energies[below_ef_mask]))
+                total_below_ef = float(trapezoid(total_signal[below_ef_mask], energies[below_ef_mask]))
                 integrated_states_below_ef = float(doscar.integrated_total_dos[..., below_ef_mask][:, -1].sum())
             else:
                 total_below_ef = 0.0

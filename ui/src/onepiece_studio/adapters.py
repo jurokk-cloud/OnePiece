@@ -1,10 +1,5 @@
 from __future__ import annotations
 
-import logging
-import os
-import subprocess  # nosec B404
-import sys
-import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
@@ -12,9 +7,22 @@ from typing import Any, Protocol, runtime_checkable
 import pandas as pd
 
 from onepiece.frame_utils import ensure_name_index
-from onepiece.storage import load_dataset
-
-logger = logging.getLogger(__name__)
+from onepiece.services import DatasetQuery, apply_dataset_query
+from onepiece.sources.core import read_hdf_path
+from onepiece_studio.state import (
+    CONTROL_DROP_CONVERGENCE,
+    CONTROL_DROP_TEST,
+    CONTROL_FMAX_MAX,
+    CONTROL_MATERIAL_QUERY,
+    CONTROL_NUMERIC,
+    CONTROL_ROW_KEY,
+    CONTROL_SELECTED_FACETS,
+    CONTROL_STATUS,
+    CONTROL_TEXT_EXCLUDE,
+    CONTROL_TEXT_INCLUDE,
+    CONTROL_USE_STATUS,
+    CONTROL_VISIBLE_STATES,
+)
 
 
 @runtime_checkable
@@ -44,23 +52,103 @@ class HDFSource:
     numpy_pickle_compat: bool = True
 
     def load(self) -> pd.DataFrame:
-        source_path = Path(self.path)
-        if source_path.is_dir() or source_path.suffix.lower() in {".parquet", ".pq", ".json"}:
-            frame, _manifest = load_dataset(source_path)
-            return ensure_name_index(frame)
-        if self.numpy_pickle_compat:
-            _install_numpy_pickle_compat()
-        try:
-            return ensure_name_index(pd.read_hdf(self.path, key=self.key).copy())
-        except Exception as exc:
-            try:
-                return ensure_name_index(pd.read_hdf(self.path, key=self.key).copy())
-            except Exception:
-                return ensure_name_index(_read_hdf_with_helper_python(Path(self.path), key=self.key, original_error=exc))
+        return read_hdf_path(
+            Path(self.path),
+            key=self.key,
+            numpy_pickle_compat=self.numpy_pickle_compat,
+        )
 
     @property
     def display_name(self) -> str:
         return self.name or Path(self.path).name
+
+
+def load_source_cached(source: DatabaseSource) -> pd.DataFrame:
+    """Load a source, caching file-backed reads across Streamlit reruns.
+
+    The cache key includes the file's mtime, so an updated file is reread.
+    Falls back to a plain load for in-memory sources and unreadable paths
+    (those raise their friendly error inside ``load``).
+    """
+    path = getattr(source, "path", None)
+    if path is None:
+        return source.load()
+    resolved = Path(path)
+    try:
+        mtime_ns = resolved.stat().st_mtime_ns
+    except OSError:
+        return source.load()
+    key = str(getattr(source, "key", "df"))
+    return _cached_read(str(resolved), key, mtime_ns).copy()
+
+
+_CACHED_READ_IMPL = None
+
+
+def _cached_read(path: str, key: str, mtime_ns: int) -> pd.DataFrame:
+    global _CACHED_READ_IMPL
+    if _CACHED_READ_IMPL is None:
+        import streamlit as st
+
+        @st.cache_resource(max_entries=4, show_spinner="Loading dataset...")
+        def _read(path: str, key: str, mtime_ns: int) -> pd.DataFrame:
+            return read_hdf_path(Path(path), key=key)
+
+        _CACHED_READ_IMPL = _read
+    return _CACHED_READ_IMPL(path, key, mtime_ns)
+
+
+def row_key_from_row(row: pd.Series, fallback: Any) -> str:
+    """Stable identity key for one row, matching :func:`row_keys`."""
+    if "source_hdf" in row.index and "source_row" in row.index:
+        return f"{row['source_hdf']}::{row['source_row']}"
+    return str(fallback)
+
+
+def row_keys(dataframe: pd.DataFrame) -> pd.Series:
+    """Stable per-row identity keys shared by filters, statuses, and edits."""
+    if {"source_hdf", "source_row"}.issubset(dataframe.columns):
+        return dataframe["source_hdf"].astype(str) + "::" + dataframe["source_row"].astype(str)
+    return pd.Series(dataframe.index.astype(str), index=dataframe.index)
+
+
+def ensure_controlroom_state(st: Any, dataframe: pd.DataFrame) -> None:
+    """Seed the Filter-page session-state keys with their defaults."""
+    st.session_state.setdefault(CONTROL_TEXT_INCLUDE, "")
+    st.session_state.setdefault(CONTROL_TEXT_EXCLUDE, "")
+    st.session_state.setdefault(CONTROL_USE_STATUS, True)
+    st.session_state.setdefault(CONTROL_STATUS, {})
+    st.session_state.setdefault(CONTROL_SELECTED_FACETS, {})
+    st.session_state.setdefault(CONTROL_NUMERIC, {})
+    st.session_state.setdefault(CONTROL_MATERIAL_QUERY, {})
+    st.session_state.setdefault(CONTROL_FMAX_MAX, None)
+    st.session_state.setdefault(CONTROL_DROP_CONVERGENCE, False)
+    st.session_state.setdefault(CONTROL_DROP_TEST, False)
+    if CONTROL_ROW_KEY not in st.session_state:
+        st.session_state[CONTROL_ROW_KEY] = row_keys(dataframe)
+
+
+def apply_controlroom_filters(st: Any, dataframe: pd.DataFrame) -> pd.DataFrame:
+    """Apply the session's Filter-page selections without rendering anything."""
+    ensure_controlroom_state(st, dataframe)
+    query = DatasetQuery(
+        text_include=st.session_state.get(CONTROL_TEXT_INCLUDE, ""),
+        text_exclude=st.session_state.get(CONTROL_TEXT_EXCLUDE, ""),
+        drop_convergence=bool(st.session_state.get(CONTROL_DROP_CONVERGENCE, True)),
+        drop_test=bool(st.session_state.get(CONTROL_DROP_TEST, True)),
+        materials=dict(st.session_state.get(CONTROL_MATERIAL_QUERY, {})),
+        selected_facets=dict(st.session_state.get(CONTROL_SELECTED_FACETS, {})),
+        fmax_max=st.session_state.get(CONTROL_FMAX_MAX),
+        numeric_ranges=dict(st.session_state.get(CONTROL_NUMERIC, {})),
+        use_status=bool(st.session_state.get(CONTROL_USE_STATUS, True)),
+        visible_states=list(st.session_state.get(CONTROL_VISIBLE_STATES, ["included", "review", "reference"])),
+    )
+    return apply_dataset_query(
+        dataframe,
+        query,
+        row_key_series=row_keys(dataframe),
+        status_map=st.session_state.get(CONTROL_STATUS, {}),
+    )
 
 
 @dataclass(slots=True)
@@ -82,75 +170,3 @@ class OnePieceSource:
         )
 
 
-def _install_numpy_pickle_compat() -> None:
-    """Allow reading HDF files pickled with NumPy 2 from NumPy 1 environments."""
-    import ase.constraints  # noqa: F401
-    import numpy as np
-    import numpy.core as numpy_core
-
-    for module_name in ("scipy.linalg", "sympy", "tables"):
-        try:
-            __import__(module_name)
-        except Exception as exc:
-            logger.debug("Optional compatibility preload for %s skipped: %s", module_name, exc)
-
-    sys.modules.setdefault("numpy._core", numpy_core)
-    sys.modules.setdefault("numpy._core.multiarray", np.core.multiarray)
-    sys.modules.setdefault("numpy._core.numeric", np.core.numeric)
-
-
-def _read_hdf_with_helper_python(path: Path, *, key: str, original_error: Exception) -> pd.DataFrame:
-    helper_python = _helper_python_path()
-    if helper_python is None:
-        raise original_error
-    output = Path(tempfile.NamedTemporaryFile(delete=False, suffix=".pkl", prefix="onepiece_studio_hdf_").name)
-    script = """
-from pathlib import Path
-import sys
-import numpy as np
-import pandas as pd
-try:
-    import numpy.core as numpy_core
-    sys.modules.setdefault("numpy._core", numpy_core)
-    sys.modules.setdefault("numpy._core.multiarray", np.core.multiarray)
-    sys.modules.setdefault("numpy._core.numeric", np.core.numeric)
-    import scipy.linalg  # noqa: F401
-    import ase.constraints  # noqa: F401
-    import sympy  # noqa: F401
-except Exception:
-    pass
-source = Path(sys.argv[1])
-key = sys.argv[2]
-target = Path(sys.argv[3])
-pd.read_hdf(source, key=key).to_pickle(target)
-"""
-    # The helper executable and arguments are fully constructed in-process.
-    completed = subprocess.run(  # nosec B603
-        [str(helper_python), "-c", script, str(path), key, str(output)],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    if completed.returncode != 0:
-        detail = completed.stderr.strip() or completed.stdout.strip()
-        raise RuntimeError(f"{original_error}. Helper reader also failed: {detail}")
-    # The pickle is a temporary artifact produced by the helper process above.
-    return pd.read_pickle(output)  # nosec B301
-
-
-def _helper_python_path() -> Path | None:
-    candidates = []
-    configured = os.environ.get("ONEPIECE_STUDIO_HELPER_PYTHON")
-    if configured:
-        candidates.append(Path(configured).expanduser())
-    candidates.extend(
-        [
-            Path(sys.executable),
-            Path("/opt/homebrew/bin/python3"),
-            Path("/usr/local/bin/python3"),
-        ]
-    )
-    for candidate in candidates:
-        if candidate.exists():
-            return candidate
-    return None

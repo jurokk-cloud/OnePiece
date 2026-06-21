@@ -7,6 +7,9 @@ from onepiece.services.dataset_service import (
     filter_any_token,
     filter_text,
     query_description,
+    record_type_series,
+    row_atom_counts,
+    row_element_counts,
 )
 
 __all__ = [
@@ -16,4 +19,7 @@ __all__ = [
     "filter_any_token",
     "filter_text",
     "query_description",
+    "record_type_series",
+    "row_atom_counts",
+    "row_element_counts",
 ]

@@ -14,6 +14,7 @@ from onepiece.sources.core import (
     read_uploaded_hdf,
     restore_source_descriptors,
     source_descriptors,
+    source_fingerprint,
     source_profile_summary,
     store_source,
 )
@@ -32,6 +33,7 @@ __all__ = [
     "read_uploaded_hdf",
     "restore_source_descriptors",
     "source_descriptors",
+    "source_fingerprint",
     "source_profile_summary",
     "store_source",
 ]

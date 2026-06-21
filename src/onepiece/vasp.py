@@ -12,6 +12,7 @@ from ase import Atoms
 from ase.calculators.vasp.vasp_auxiliary import VaspChargeDensity, VaspDos
 from ase.calculators.vasp.vasp_data import PDOS_orbital_names_and_DOSCAR_column
 
+from onepiece._compat import trapezoid
 from onepiece.adsorption import assign_surface_references, primary_structure
 from onepiece.frame_utils import ensure_name_index, row_name
 from onepiece.thermo import is_gas_phase_row
@@ -254,6 +255,57 @@ def add_atomic_charge_descriptors(
     return df
 
 
+def atomic_magnetic_moments_from_atoms(atoms: Atoms | None) -> np.ndarray | None:
+    if atoms is None or atoms.__class__.__name__ != "Atoms":
+        return None
+    arrays = getattr(atoms, "arrays", {})
+    for key in ("magmoms", "initial_magmoms"):
+        values = arrays.get(key)
+        if values is not None:
+            data = np.asarray(values, dtype=float).reshape(-1)
+            if data.shape[0] == len(atoms):
+                return data
+    try:
+        data = np.asarray(atoms.get_initial_magnetic_moments(), dtype=float).reshape(-1)
+    except Exception:
+        data = np.zeros(len(atoms), dtype=float)
+    if data.shape[0] != len(atoms):
+        data = np.zeros(len(atoms), dtype=float)
+    return data
+
+
+def add_atomic_magnetic_moment_descriptors(
+    frame: pd.DataFrame,
+    *,
+    structure_column: str = "struc",
+) -> pd.DataFrame:
+    """Add per-atom and total magnetic-moment descriptors from structures.
+
+    .. code-block:: python
+
+        from onepiece import add_atomic_magnetic_moment_descriptors
+
+        frame = add_atomic_magnetic_moment_descriptors(frame)
+        frame[["atomic_magnetic_moments", "total_magnetic_moment"]]
+    """
+    df = ensure_name_index(frame)
+    if "atomic_magnetic_moments" not in df.columns:
+        df["atomic_magnetic_moments"] = None
+    if "total_magnetic_moment" not in df.columns:
+        df["total_magnetic_moment"] = np.nan
+
+    for index, row in df.iterrows():
+        atoms = _row_atoms(row, structure_column)
+        moments = atomic_magnetic_moments_from_atoms(atoms)
+        if moments is None:
+            continue
+        df.at[index, "atomic_magnetic_moments"] = moments.tolist()
+        df.at[index, "total_magnetic_moment"] = float(moments.sum())
+        _write_per_element_statistics(df, index, atoms, moments, suffix="magnetic_moment")
+
+    return df
+
+
 def add_adsorbate_charge_descriptors(
     frame: pd.DataFrame,
     *,
@@ -276,18 +328,22 @@ def add_adsorbate_charge_descriptors(
         acf_filename=acf_filename,
         filename=filename,
     )
+    df = add_atomic_magnetic_moment_descriptors(df, structure_column=structure_column)
     df["primary_atoms"] = df.apply(
         lambda row: primary_structure(row, structure_columns=(structure_column, "CONTCAR", "structure", "atoms")),
         axis=1,
     )
     surface_rows = df.loc[
         df["Name"].astype(str).eq(df["surface_ref_name"].astype(str)) & df["primary_atoms"].notna()
-    ][["Name", "primary_atoms", "integrated_electron_populations", "atomic_charges"]].drop_duplicates("Name")
+    ][["Name", "primary_atoms", "integrated_electron_populations", "atomic_charges", "atomic_magnetic_moments"]].drop_duplicates("Name")
     surface_atom_map = surface_rows.set_index("Name")["primary_atoms"].to_dict()
     surface_population_map = surface_rows.set_index("Name")["integrated_electron_populations"].to_dict()
     surface_charge_map = surface_rows.set_index("Name")["atomic_charges"].to_dict()
 
     gas_reference_map = _gas_phase_charge_references(df)
+    gas_charge_reference_map = _gas_phase_atomic_array_references(df, "atomic_charges")
+    gas_magnetic_moment_reference_map = _gas_phase_atomic_array_references(df, "atomic_magnetic_moments")
+    surface_magnetic_moment_map = surface_rows.set_index("Name")["atomic_magnetic_moments"].to_dict()
 
     for column in (
         "adsorbate_atom_indices",
@@ -312,14 +368,25 @@ def add_adsorbate_charge_descriptors(
     ):
         if column not in df.columns:
             df[column] = np.nan
+    for column in (
+        "atomic_charge_delta_vs_surface_ref_e",
+        "atomic_charge_delta_vs_gas_ref_e",
+        "atomic_charge_delta_vs_valence_ref_e",
+        "atomic_magnetic_moment_delta_vs_surface_ref",
+        "atomic_magnetic_moment_delta_vs_gas_ref",
+    ):
+        if column not in df.columns:
+            df[column] = None
 
     for index, row in df.iterrows():
         atoms = row.get("primary_atoms")
         surface_atoms = surface_atom_map.get(row.get("surface_ref_name"))
         populations = _as_array(row.get("integrated_electron_populations"))
         charges = _as_array(row.get("atomic_charges"))
+        magnetic_moments = _as_array(row.get("atomic_magnetic_moments"))
         if atoms is None or surface_atoms is None or populations is None:
             continue
+        natoms = len(atoms)
 
         surface_indices = matched_surface_atom_indices_from_structures(atoms, surface_atoms)
         if len(surface_indices) == len(atoms):
@@ -342,6 +409,7 @@ def add_adsorbate_charge_descriptors(
             df.at[index, "surface_reference_mode"] = "surface_reference"
 
         if charges is not None:
+            df.at[index, "atomic_charge_delta_vs_valence_ref_e"] = charges.tolist()
             adsorbate_net_charge = float(charges[adsorbate_indices].sum())
             surface_net_charge = float(charges[surface_indices].sum())
             df.at[index, "adsorbate_net_charge_e"] = adsorbate_net_charge
@@ -351,6 +419,22 @@ def add_adsorbate_charge_descriptors(
             if surface_ref_charges is not None:
                 df.at[index, "surface_net_charge_delta_vs_ref_e"] = (
                     surface_net_charge - float(surface_ref_charges.sum())
+                )
+                df.at[index, "atomic_charge_delta_vs_surface_ref_e"] = _aligned_reference_difference_vector(
+                    charges,
+                    surface_ref_charges,
+                    natoms=natoms,
+                    target_indices=surface_indices,
+                )
+
+        if magnetic_moments is not None:
+            surface_ref_magnetic_moments = _as_array(surface_magnetic_moment_map.get(row.get("surface_ref_name")))
+            if surface_ref_magnetic_moments is not None:
+                df.at[index, "atomic_magnetic_moment_delta_vs_surface_ref"] = _aligned_reference_difference_vector(
+                    magnetic_moments,
+                    surface_ref_magnetic_moments,
+                    natoms=natoms,
+                    target_indices=surface_indices,
                 )
 
         reference_mode = None
@@ -379,6 +463,24 @@ def add_adsorbate_charge_descriptors(
                     reference_electrons = float(np.asarray(valence)[adsorbate_indices].sum())
                     reference_charge = 0.0
 
+        gas_charge_reference = _as_array(gas_charge_reference_map.get(adsorbate_label))
+        if charges is not None and gas_charge_reference is not None:
+            df.at[index, "atomic_charge_delta_vs_gas_ref_e"] = _aligned_reference_difference_vector(
+                charges,
+                gas_charge_reference,
+                natoms=natoms,
+                target_indices=adsorbate_indices,
+            )
+
+        gas_magnetic_reference = _as_array(gas_magnetic_moment_reference_map.get(adsorbate_label))
+        if magnetic_moments is not None and gas_magnetic_reference is not None:
+            df.at[index, "atomic_magnetic_moment_delta_vs_gas_ref"] = _aligned_reference_difference_vector(
+                magnetic_moments,
+                gas_magnetic_reference,
+                natoms=natoms,
+                target_indices=adsorbate_indices,
+            )
+
         if reference_mode is not None:
             df.at[index, "adsorbate_reference_mode"] = reference_mode
             df.at[index, "adsorbate_reference_integrated_electrons"] = reference_electrons
@@ -400,6 +502,38 @@ def add_adsorbate_charge_descriptors(
             )
 
     return df
+
+
+def add_atomic_reference_difference_descriptors(
+    frame: pd.DataFrame,
+    *,
+    charge_source: str = "acf",
+    acf_path_column: str = "acf_path",
+    chgcar_path_column: str = "chgcar_path",
+    calculation_path_column: str = "Path",
+    structure_column: str = "struc",
+    acf_filename: str = "ACF.dat",
+    filename: str = "CHGCAR",
+) -> pd.DataFrame:
+    """Add per-atom charge differences versus per-element valence references.
+
+    .. code-block:: python
+
+        from onepiece import add_atomic_reference_difference_descriptors
+
+        frame = add_atomic_reference_difference_descriptors(frame)
+        frame["atomic_charge_delta_vs_valence_ref_e"]
+    """
+    return add_adsorbate_charge_descriptors(
+        frame,
+        charge_source=charge_source,
+        acf_path_column=acf_path_column,
+        chgcar_path_column=chgcar_path_column,
+        calculation_path_column=calculation_path_column,
+        structure_column=structure_column,
+        acf_filename=acf_filename,
+        filename=filename,
+    )
 
 
 def read_doscar(path: Path | str, *, shift_to_fermi: bool = True) -> DoscarData:
@@ -535,6 +669,7 @@ def atomic_charge_long_table(
         atoms = _row_atoms(row, structure_column)
         populations = _as_array(row.get("integrated_electron_populations"))
         charges = _as_array(row.get("atomic_charges"))
+        magnetic_moments = _as_array(row.get("atomic_magnetic_moments"))
         if atoms is None or populations is None:
             continue
         positions = np.asarray(atoms.get_positions(), dtype=float)
@@ -550,6 +685,7 @@ def atomic_charge_long_table(
                     "z": float(positions[atom_index, 2]),
                     "integrated_electron_population": float(populations[atom_index]),
                     "atomic_charge": float(charges[atom_index]) if charges is not None and atom_index < len(charges) else np.nan,
+                    "atomic_magnetic_moment": float(magnetic_moments[atom_index]) if magnetic_moments is not None and atom_index < len(magnetic_moments) else np.nan,
                 }
             )
     table = pd.DataFrame(rows)
@@ -564,6 +700,7 @@ def atomic_charge_long_table(
                 "z",
                 "integrated_electron_population",
                 "atomic_charge",
+                "atomic_magnetic_moment",
             ]
         ).set_index(["calculation_name", "atom_index"], drop=False)
     return table.set_index(["calculation_name", "atom_index"], drop=False)
@@ -696,7 +833,7 @@ def _integrate_signal(
     mask = (energies >= float(emin)) & (energies <= float(emax))
     if not mask.any():
         return 0.0
-    return float(np.trapz(signal[mask], energies[mask]))
+    return float(trapezoid(signal[mask], energies[mask]))
 
 
 def _resolve_row_file_path(
@@ -831,6 +968,50 @@ def _gas_phase_charge_references(frame: pd.DataFrame) -> dict[str, dict[str, flo
             "net_charge": float(charges.sum()) if charges is not None else 0.0,
         }
     return references
+
+
+def _gas_phase_atomic_array_references(frame: pd.DataFrame, value_column: str) -> dict[str, np.ndarray]:
+    references: dict[str, np.ndarray] = {}
+    for _, row in frame.iterrows():
+        if not is_gas_phase_row(row):
+            continue
+        label = str(row.get("adsorbate", "")).strip()
+        if not label:
+            continue
+        values = _as_array(row.get(value_column))
+        if values is None:
+            continue
+        references[label] = values
+    return references
+
+
+def _aligned_reference_difference_vector(
+    values: np.ndarray | Sequence[float],
+    reference: np.ndarray | Sequence[float],
+    *,
+    natoms: int,
+    target_indices: Sequence[int] | None = None,
+) -> list[float]:
+    value_array = np.asarray(values, dtype=float)
+    reference_array = np.asarray(reference, dtype=float)
+    result = np.full(int(natoms), np.nan, dtype=float)
+    if target_indices is None:
+        count = min(value_array.shape[0], reference_array.shape[0], result.shape[0])
+        if count > 0:
+            result[:count] = value_array[:count] - reference_array[:count]
+        return result.tolist()
+    indices = np.asarray(list(target_indices), dtype=int)
+    if indices.size == 0:
+        return result.tolist()
+    count = min(indices.shape[0], reference_array.shape[0])
+    if count <= 0:
+        return result.tolist()
+    active = indices[:count]
+    valid = active[(active >= 0) & (active < value_array.shape[0]) & (active < result.shape[0])]
+    count = min(valid.shape[0], reference_array.shape[0])
+    if count > 0:
+        result[valid[:count]] = value_array[valid[:count]] - reference_array[:count]
+    return result.tolist()
 
 
 def _as_array(value: object) -> np.ndarray | None:

@@ -186,7 +186,7 @@ def build_html(extended: pd.DataFrame) -> str:
       margin: 0;
       color: var(--ink);
       background: #fbfcfd;
-      font-family: Lucifer, "Lucifer Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
       line-height: 1.45;
     }}
     header, main {{ width: min(1500px, calc(100vw - 48px)); margin: 0 auto; }}

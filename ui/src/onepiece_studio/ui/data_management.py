@@ -11,19 +11,35 @@ import pandas as pd
 from onepiece.projects import build_project_payload as backend_build_project_payload
 from onepiece.projects import restore_project_payload as backend_restore_project_payload
 from onepiece.sources import source_descriptors
+from onepiece_studio.state import (
+    AUDIT_LOG,
+    CONTROL_DROP_CONVERGENCE,
+    CONTROL_DROP_TEST,
+    CONTROL_FMAX_MAX,
+    CONTROL_MATERIAL_QUERY,
+    CONTROL_NUMERIC,
+    CONTROL_SELECTED_FACETS,
+    CONTROL_STATUS,
+    CONTROL_TEXT_EXCLUDE,
+    CONTROL_TEXT_INCLUDE,
+    CONTROL_USE_STATUS,
+    CONTROL_VISIBLE_STATES,
+    SAVED_VIEWS,
+    WORKFLOW_OPERATIONS,
+)
 from onepiece_studio.ui.workbook import EDIT_STATE_KEY, render_workbook
 
 CONTROL_KEYS = [
-    "onepiece_studio_control_text_include",
-    "onepiece_studio_control_text_exclude",
-    "onepiece_studio_control_use_status",
-    "onepiece_studio_control_visible_states",
-    "onepiece_studio_control_selected_facets",
-    "onepiece_studio_control_numeric",
-    "onepiece_studio_control_material_query",
-    "onepiece_studio_control_fmax_max",
-    "onepiece_studio_control_drop_convergence",
-    "onepiece_studio_control_drop_test",
+    CONTROL_TEXT_INCLUDE,
+    CONTROL_TEXT_EXCLUDE,
+    CONTROL_USE_STATUS,
+    CONTROL_VISIBLE_STATES,
+    CONTROL_SELECTED_FACETS,
+    CONTROL_NUMERIC,
+    CONTROL_MATERIAL_QUERY,
+    CONTROL_FMAX_MAX,
+    CONTROL_DROP_CONVERGENCE,
+    CONTROL_DROP_TEST,
 ]
 
 
@@ -57,13 +73,13 @@ def render_data_management(st: Any, source: pd.DataFrame, active: pd.DataFrame) 
 
 
 def _init_state(st: Any) -> None:
-    st.session_state.setdefault("onepiece_studio_saved_views", {})
-    st.session_state.setdefault("onepiece_studio_audit_log", [])
-    st.session_state.setdefault("onepiece_studio_control_status", {})
+    st.session_state.setdefault(SAVED_VIEWS, {})
+    st.session_state.setdefault(AUDIT_LOG, [])
+    st.session_state.setdefault(CONTROL_STATUS, {})
 
 
 def _render_top_metrics(st: Any, source: pd.DataFrame, active: pd.DataFrame) -> None:
-    states = st.session_state.get("onepiece_studio_control_status", {})
+    states = st.session_state.get(CONTROL_STATUS, {})
     top = st.columns(3, gap="small")
     bottom = st.columns(2, gap="small")
     top[0].metric("Active rows", f"{len(active):,}")
@@ -82,14 +98,14 @@ def _render_saved_views(st: Any) -> None:
     name = st.text_input("View name", placeholder="e.g. clean 211 surfaces with fmax ok")
     columns = st.columns([0.25, 0.25, 0.5])
     if columns[0].button("Save current view", disabled=not name, width="stretch"):
-        st.session_state["onepiece_studio_saved_views"][name] = {
+        st.session_state[SAVED_VIEWS][name] = {
             "saved_at": datetime.now().isoformat(timespec="seconds"),
             "state": _capture_control_state(st),
         }
         _audit(st, f"Saved view: {name}")
         st.success(f"Saved view '{name}'.")
 
-    saved = st.session_state.get("onepiece_studio_saved_views", {})
+    saved = st.session_state.get(SAVED_VIEWS, {})
     selected = columns[2].selectbox("Saved views", [""] + sorted(saved))
     if columns[1].button("Restore", disabled=not selected, width="stretch"):
         _restore_control_state(st, saved[selected]["state"])
@@ -104,14 +120,14 @@ def _render_saved_views(st: Any) -> None:
         st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch")
 
     if selected and st.button("Delete selected view", type="secondary"):
-        st.session_state["onepiece_studio_saved_views"].pop(selected, None)
+        st.session_state[SAVED_VIEWS].pop(selected, None)
         _audit(st, f"Deleted view: {selected}")
         st.rerun()
 
 
 def _render_row_states(st: Any, source: pd.DataFrame, active: pd.DataFrame) -> None:
     st.markdown("**Row-state board**")
-    status = st.session_state.get("onepiece_studio_control_status", {})
+    status = st.session_state.get(CONTROL_STATUS, {})
     board = _state_board(source, status)
     st.dataframe(board, hide_index=True, width="stretch")
 
@@ -135,7 +151,7 @@ def _render_row_states(st: Any, source: pd.DataFrame, active: pd.DataFrame) -> N
         rows = _status_rows(source, status)
         st.dataframe(rows, hide_index=True, width="stretch", height=280)
         if st.button("Clear all row-state overrides"):
-            st.session_state["onepiece_studio_control_status"] = {}
+            st.session_state[CONTROL_STATUS] = {}
             _audit(st, "Cleared all row-state overrides")
             st.rerun()
 
@@ -192,9 +208,9 @@ def _render_exports(st: Any, source: pd.DataFrame, active: pd.DataFrame) -> None
         "active_rows": int(len(active)),
         "columns": list(source.columns),
         "control_state": _capture_control_state(st),
-        "saved_views": list(st.session_state.get("onepiece_studio_saved_views", {})),
-        "row_state_overrides": st.session_state.get("onepiece_studio_control_status", {}),
-        "audit_log": st.session_state.get("onepiece_studio_audit_log", []),
+        "saved_views": list(st.session_state.get(SAVED_VIEWS, {})),
+        "row_state_overrides": st.session_state.get(CONTROL_STATUS, {}),
+        "audit_log": st.session_state.get(AUDIT_LOG, []),
     }
     col2.download_button(
         "Download dataset manifest JSON",
@@ -205,7 +221,7 @@ def _render_exports(st: Any, source: pd.DataFrame, active: pd.DataFrame) -> None
     )
 
     st.markdown("**Audit log**")
-    audit = st.session_state.get("onepiece_studio_audit_log", [])
+    audit = st.session_state.get(AUDIT_LOG, [])
     if audit:
         st.dataframe(pd.DataFrame(audit), hide_index=True, width="stretch")
     else:
@@ -284,12 +300,12 @@ def _render_project_file_tools(st: Any, source: pd.DataFrame, active: pd.DataFra
     st.dataframe(
         pd.DataFrame(
             [
-                {"section": "workflow_operations", "items": len(st.session_state.get("onepiece_studio_workflow_operations", []))},
+                {"section": "workflow_operations", "items": len(st.session_state.get(WORKFLOW_OPERATIONS, []))},
                 {"section": "control_state", "items": len(_capture_control_state(st))},
-                {"section": "row_state_overrides", "items": len(st.session_state.get("onepiece_studio_control_status", {}))},
+                {"section": "row_state_overrides", "items": len(st.session_state.get(CONTROL_STATUS, {}))},
                 {"section": "workbook_edits", "items": len(st.session_state.get(EDIT_STATE_KEY, {}))},
                 {"section": "source_blocks", "items": len(source_descriptors(st.session_state))},
-                {"section": "saved_views", "items": len(st.session_state.get("onepiece_studio_saved_views", {}))},
+                {"section": "saved_views", "items": len(st.session_state.get(SAVED_VIEWS, {}))},
             ]
         ),
         hide_index=True,
@@ -328,10 +344,10 @@ def _state_board(source: pd.DataFrame, status: dict[str, str]) -> pd.DataFrame:
 
 
 def _set_many_states(st: Any, dataframe: pd.DataFrame, state: str) -> None:
-    status = st.session_state.setdefault("onepiece_studio_control_status", {})
+    status = st.session_state.setdefault(CONTROL_STATUS, {})
     for key in _row_keys(dataframe):
         status[key] = state
-    st.session_state["onepiece_studio_control_use_status"] = True
+    st.session_state[CONTROL_USE_STATUS] = True
 
 
 def _status_rows(source: pd.DataFrame, status: dict[str, str]) -> pd.DataFrame:
@@ -429,6 +445,6 @@ def _row_key(row: pd.Series, fallback: Any) -> str:
 
 
 def _audit(st: Any, action: str) -> None:
-    st.session_state.setdefault("onepiece_studio_audit_log", []).append(
+    st.session_state.setdefault(AUDIT_LOG, []).append(
         {"time": datetime.now().isoformat(timespec="seconds"), "action": action}
     )

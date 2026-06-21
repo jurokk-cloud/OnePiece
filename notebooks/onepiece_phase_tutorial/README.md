@@ -29,16 +29,19 @@ für Schritt, wie die Tabellen unter dem Bulk/Oberflächen-Multiplot entstehen.
 
 ## Inputs
 
-Die Notebooks erwarten die HDF-Dateien hier:
+Die Notebooks lesen den Datenpfad aus der Umgebungsvariable
+`ONEPIECE_DATA_ROOT` (Standardwert: `data/surface_alloys` relativ zum
+Arbeitsverzeichnis):
 
-`/Users/dk2994/Desktop/Uni/Journal/Thesis/Notebooks/Surface Alloys`
+```bash
+export ONEPIECE_DATA_ROOT="/pfad/zu/surface_alloys"
+```
 
-Die Pfade sind oben in jedem Notebook in `DATA_ROOT` definiert.
+Der Pfad ist oben in jedem Notebook in `DATA_ROOT` definiert.
 
 ## Outputs
 
-Die Tutorial-Outputs werden nach
-
-`/Users/dk2994/Desktop/git/PFUI/notebooks/phase_diagram_outputs`
-
-geschrieben, damit sie neben den bereits erzeugten finalen Diagrammen liegen.
+Die Tutorial-Outputs werden nach `notebooks/phase_diagram_outputs` unterhalb des
+Projektstammverzeichnisses geschrieben (`ONEPIECE_PROJECT_ROOT`, Standardwert:
+aktuelles Arbeitsverzeichnis), damit sie neben den bereits erzeugten finalen
+Diagrammen liegen.

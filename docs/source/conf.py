@@ -8,7 +8,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 project = "onepiece-studio"
 author = "Claude Coppex"
-release = "1.0.0"
+release = "1.0.1"
 
 extensions = [
     "myst_parser",

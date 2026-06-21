@@ -5,8 +5,8 @@ from pathlib import Path
 
 import pandas as pd
 from ase import Atoms
-
-from onepiece.adsorption import add_element_count_columns, get_all_elements
+from onepiece_studio.config import OnePieceStudioConfig
+from onepiece_studio.state import AUDIT_LOG, WORKFLOW_OPERATIONS
 from onepiece_studio.ui.controlroom import _available_elements, _clamp_float, _filter_text
 from onepiece_studio.ui.data_management import (
     _build_project_payload,
@@ -26,7 +26,8 @@ from onepiece_studio.ui.data_sources import (
     restore_source_descriptors,
     source_descriptors,
 )
-from onepiece_studio.ui.streamlit_app import (
+from onepiece_studio.ui.streamlit_app import build_page_functions
+from onepiece_studio.ui.visualize import (
     _chart_interpretation,
     _chart_presets,
     _column_plot_label,
@@ -50,6 +51,19 @@ from onepiece_studio.ui.workflow_builder import (
     _valid_new_column,
     _workflow_gas_reference_values,
 )
+
+from onepiece.adsorption import add_element_count_columns, get_all_elements
+from onepiece.sources import (
+    restore_source_descriptors as backend_restore_source_descriptors,
+)
+from onepiece.sources import (
+    store_source as backend_store_source,
+)
+
+
+class DummySource:
+    name = "dummy"
+    display_name = "dummy"
 
 
 class DummyStreamlit:
@@ -75,6 +89,29 @@ def test_capture_control_state_includes_material_query() -> None:
     assert captured["onepiece_studio_control_text_include"] == "Ni"
     assert captured["onepiece_studio_control_material_query"]["chemsys"] == "Ni-Ga"
     assert captured["onepiece_studio_control_numeric"]["E"] == (-5.0, 1.0)
+
+
+def test_streamlit_page_builder_stores_workflow_audit_log_in_session_state() -> None:
+    st = DummyStreamlit(
+        {
+            WORKFLOW_OPERATIONS: [
+                {
+                    "kind": "derive_scalar",
+                    "left": "E",
+                    "operator": "+",
+                    "scalar": 1.0,
+                    "new_column": "E_plus_one",
+                }
+            ]
+        }
+    )
+    frame = pd.DataFrame({"Name": ["row-a"], "E": [1.0]})
+
+    page_functions = build_page_functions(st, DummySource(), OnePieceStudioConfig(), frame)
+
+    assert page_functions["_total_count"] == 1
+    assert st.session_state[AUDIT_LOG][0]["kind"] == "derive_scalar"
+    assert st.session_state[AUDIT_LOG][0]["added_columns"] == ["E_plus_one"]
 
 
 def test_clamp_float_keeps_numeric_widget_defaults_in_range() -> None:
@@ -318,6 +355,32 @@ def test_project_payload_roundtrip_restores_state(tmp_path: Path) -> None:
     assert restored.session_state["onepiece_studio_control_status"]["base::0"] == "review"
     assert restored.session_state[EDIT_STATE_KEY]["base::0"]["E"] == -1.0
     assert "extra" in restored.session_state["onepiece_studio_extra_hdf_sources"]
+    descriptor = raw["sources"][0]
+    assert descriptor["fingerprint"]["exists"] is True
+    assert descriptor["fingerprint"]["checksum"].startswith("sha256:")
+    restored_source = restored.session_state["onepiece_studio_extra_hdf_sources"]["extra"]
+    assert restored_source["fingerprint"]["checksum"] == descriptor["fingerprint"]["checksum"]
+
+
+def test_restore_source_descriptors_warns_when_checksum_changed(tmp_path: Path) -> None:
+    source_path = tmp_path / "changing.hdf"
+    pd.DataFrame({"Name": ["row-a"], "E": [1.0]}).to_hdf(source_path, key="df")
+    st = DummyStreamlit({})
+    source_id = backend_store_source(
+        st.session_state,
+        pd.read_hdf(source_path, key="df"),
+        label=source_path.name,
+        path=str(source_path),
+    )
+    descriptors = source_descriptors(st)
+    assert descriptors[0]["fingerprint"]["checksum"].startswith("sha256:")
+
+    pd.DataFrame({"Name": ["row-a"], "E": [2.0]}).to_hdf(source_path, key="df", mode="w")
+    restored = DummyStreamlit({})
+    messages = backend_restore_source_descriptors(restored.session_state, descriptors)
+
+    assert source_id in restored.session_state["onepiece_studio_extra_hdf_sources"]
+    assert any("checksum changed" in message for message in messages)
 
 
 def test_source_descriptors_skip_uploaded_temp_sources() -> None:

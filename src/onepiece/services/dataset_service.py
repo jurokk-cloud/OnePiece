@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 
 from onepiece._polars import dataframe_is_polars_safe, get_polars
-from onepiece.adsorption import row_element_count_map, structure_columns_in_frame
+from onepiece.adsorption import formula_counts, row_element_count_map, structure_columns_in_frame
 
 
 @dataclass(frozen=True, slots=True)
@@ -62,11 +62,14 @@ def apply_dataset_query(
 
     if normalized.get("use_status", True):
         allowed = set(normalized.get("visible_states", ["included", "review", "reference"]))
-        if row_key_series is None:
-            row_key_series = _fallback_row_keys(active)
         if status_map is None:
             status_map = {}
-        active_keys = row_key_series.loc[active.index]
+        if row_key_series is not None and active.index.is_unique:
+            active_keys = row_key_series.loc[active.index]
+        else:
+            # With duplicate index labels, .loc would return more rows than
+            # active has; rebuild the keys from the surviving rows instead.
+            active_keys = _fallback_row_keys(active)
         keep = active_keys.map(lambda key: status_map.get(key, "included") in allowed)
         active = active[keep.to_numpy()]
 
@@ -189,14 +192,14 @@ def apply_materials_search(dataframe: pd.DataFrame, query: dict[str, Any]) -> pd
 
     natoms = query.get("natoms")
     if natoms:
-        atom_counts = _row_atom_counts(active)
+        atom_counts = row_atom_counts(active)
         if _range_is_restrictive(atom_counts, natoms):
             active = active[atom_counts.between(int(natoms[0]), int(natoms[1]), inclusive="both")]
             elements_by_row = elements_by_row.loc[active.index]
 
     record_types = query.get("record_types", [])
     if record_types:
-        record_labels = _record_type_series(active)
+        record_labels = record_type_series(active)
         active = active[record_labels.isin(record_types)]
         elements_by_row = elements_by_row.loc[active.index]
 
@@ -399,7 +402,13 @@ def _row_elements(dataframe: pd.DataFrame) -> pd.Series:
     )
 
 
-def _row_atom_counts(dataframe: pd.DataFrame) -> pd.Series:
+def row_element_counts(dataframe: pd.DataFrame) -> pd.Series:
+    """Return the number of distinct elements inferred for each row."""
+    return _row_elements(dataframe).map(len)
+
+
+def row_atom_counts(dataframe: pd.DataFrame) -> pd.Series:
+    """Return atom counts per row, from ``n_atoms`` or the row structures."""
     if "n_atoms" in dataframe.columns:
         return pd.to_numeric(dataframe["n_atoms"], errors="coerce")
     structure_columns = tuple(structure_columns_in_frame(dataframe))
@@ -412,20 +421,8 @@ def _row_atom_counts(dataframe: pd.DataFrame) -> pd.Series:
     return pd.Series(np.nan, index=dataframe.index)
 
 
-def _formula_counts(value: Any) -> dict[str, int]:
-    if value is None:
-        return {}
-    text = str(value)
-    if not text or text == "0":
-        return {}
-    counts: dict[str, int] = {}
-    for element, number in re.findall(r"([A-Z][a-z]?)(\d*)", text):
-        counts[element] = counts.get(element, 0) + int(number or 1)
-    return counts
-
-
 def _anonymous_formula(value: Any) -> str:
-    counts = _formula_counts(value)
+    counts = formula_counts(value)
     if not counts:
         return ""
     ordered_counts = sorted(counts.values())
@@ -454,7 +451,8 @@ def _looks_like_element(value: Any) -> bool:
     return bool(re.fullmatch(r"[A-Z][a-z]?", str(value)))
 
 
-def _record_type_series(dataframe: pd.DataFrame) -> pd.Series:
+def record_type_series(dataframe: pd.DataFrame) -> pd.Series:
+    """Classify each row as gas reference, clean surface, adsorbate, etc."""
     text = pd.Series("", index=dataframe.index)
     for column in ["Name", "Path", "dataset", "dataset_label"]:
         if column in dataframe.columns:

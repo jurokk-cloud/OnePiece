@@ -10,6 +10,8 @@ from ase.calculators.vasp.vasp_auxiliary import VaspChargeDensity
 from onepiece import (
     add_adsorbate_charge_descriptors,
     add_atomic_charge_descriptors,
+    add_atomic_magnetic_moment_descriptors,
+    add_atomic_reference_difference_descriptors,
     add_projected_dos_descriptors,
     apply_operation,
     atomic_charge_long_table,
@@ -317,3 +319,62 @@ def _write_acf(path: Path, atoms: Atoms, charges: list[float]) -> None:
         ]
     )
     path.write_text("".join(lines))
+
+
+def test_atomic_magnetic_moments_from_structure_and_reference_delta_vectors(tmp_path: Path) -> None:
+    root = tmp_path / "mag_refs"
+    clean_dir = root / "clean"
+    gas_dir = root / "gas"
+    ads_dir = root / "ads"
+    clean_dir.mkdir(parents=True)
+    gas_dir.mkdir(parents=True)
+    ads_dir.mkdir(parents=True)
+
+    clean_atoms = Atoms("Cu2", positions=[[0, 0, 0], [2, 0, 0]], cell=[6, 6, 6], pbc=True)
+    gas_atoms = Atoms("CO", positions=[[0, 0, 0], [1.2, 0, 0]], cell=[6, 6, 6], pbc=True)
+    ads_atoms = Atoms("Cu2CO", positions=[[0, 0, 0], [2, 0, 0], [0, 0, 2.5], [1.2, 0, 2.5]], cell=[8, 6, 8], pbc=True)
+
+    clean_atoms.set_initial_magnetic_moments([0.0, 0.0])
+    gas_atoms.set_initial_magnetic_moments([0.1, -0.1])
+    ads_atoms.set_initial_magnetic_moments([0.0, 0.0, 0.2, -0.05])
+
+    (clean_dir / "POTCAR").write_text("""ZVAL   =   11.000
+""")
+    (gas_dir / "POTCAR").write_text("""ZVAL   =   4.000
+ZVAL   =   6.000
+""")
+    (ads_dir / "POTCAR").write_text("""ZVAL   =   11.000
+ZVAL   =   4.000
+ZVAL   =   6.000
+""")
+    _write_acf(clean_dir / "ACF.dat", clean_atoms, [11.0, 11.0])
+    _write_acf(gas_dir / "ACF.dat", gas_atoms, [4.0, 6.0])
+    _write_acf(ads_dir / "ACF.dat", ads_atoms, [10.9, 10.8, 4.2, 6.1])
+
+    frame = pd.DataFrame(
+        {
+            "Name": ["Cu-211-clean", "gasphases-CO", "Cu-211-clean-CO-1"],
+            "Formula": ["Cu2", "CO", "Cu2CO"],
+            "Path": [str(clean_dir), str(gas_dir), str(ads_dir)],
+            "struc": [clean_atoms, gas_atoms, ads_atoms],
+            "E": [-10.0, -14.0, -25.0],
+            "record_class": ["surface", "gas_reference", "adsorbate"],
+        }
+    )
+
+    magnetic = add_atomic_magnetic_moment_descriptors(frame)
+    assert magnetic.loc["Cu-211-clean", "atomic_magnetic_moments"] == [0.0, 0.0]
+    assert magnetic.loc["gasphases-CO", "atomic_magnetic_moments"] == [0.1, -0.1]
+
+    enriched = add_atomic_reference_difference_descriptors(frame)
+    row = enriched.loc[enriched["Name"] == "Cu-211-clean-CO-1"].iloc[0]
+
+    assert np.allclose(row["atomic_charge_delta_vs_valence_ref_e"], [0.1, 0.2, -0.2, -0.1])
+    assert np.allclose(row["atomic_charge_delta_vs_surface_ref_e"][:2], [0.1, 0.2], equal_nan=True)
+    assert np.isnan(row["atomic_charge_delta_vs_surface_ref_e"][2])
+    assert np.allclose(row["atomic_charge_delta_vs_gas_ref_e"][2:], [-0.2, -0.1], equal_nan=True)
+    assert np.allclose(row["atomic_magnetic_moment_delta_vs_surface_ref"][:2], [0.0, 0.0], equal_nan=True)
+    assert np.allclose(row["atomic_magnetic_moment_delta_vs_gas_ref"][2:], [0.1, 0.05], equal_nan=True)
+
+    long_table = atomic_charge_long_table(enriched)
+    assert "atomic_magnetic_moment" in long_table.columns

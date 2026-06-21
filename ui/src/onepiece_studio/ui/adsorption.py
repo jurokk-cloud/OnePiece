@@ -616,8 +616,8 @@ The `copt` barrier is an apparent scan barrier:
 def _style_plotly(fig: Any, title: str) -> None:
     fig.update_layout(
         title=title,
-        font_family="Lucifer",
-        title_font_family="Lucifer",
+        font_family="system-ui",
+        title_font_family="system-ui",
         paper_bgcolor="#FCFCFD",
         plot_bgcolor="#FFFFFF",
         margin=dict(l=12, r=12, t=56, b=12),

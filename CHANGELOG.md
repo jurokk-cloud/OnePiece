@@ -9,6 +9,17 @@ The project follows a simple, research-software-oriented changelog style:
 - `Fixed` for bug fixes and scientific correctness corrections
 - `Docs` for user-facing documentation and release-process improvements
 
+## [1.0.1] - 2026-06-21
+
+### Changed
+
+- Bumped backend and frontend packaging metadata to `1.0.1`.
+- Updated the `onepiece-studio` backend dependency floor to `onepiece[performance]>=1.0.1,<2.0.0`.
+
+### Docs
+
+- Updated release status markers in the README and Sphinx documentation.
+
 ## [1.0.0] - 2026-06-08
 
 ### Added

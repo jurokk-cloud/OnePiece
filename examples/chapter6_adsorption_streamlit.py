@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+
 import sys
 from pathlib import Path
 
@@ -8,13 +10,14 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from onepiece import add_adsorption_energies, assign_references_before_merge
-from onepiece_studio import DataFrameSource, OnePieceStudioConfig
 from onepiece_studio.ui.streamlit_app import run_app
 
+from onepiece import add_adsorption_energies, assign_references_before_merge
+from onepiece_studio import DataFrameSource, OnePieceStudioConfig
+
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-DATA_ROOT = Path("/Users/dk2994/Desktop/Uni/Journal/Thesis/Notebooks/Database/Chapter6")
-GAS_HDF = Path("/Users/dk2994/Desktop/Uni/Journal/Thesis/Notebooks/Database/Gas.hdf")
+DATA_ROOT = Path(os.environ.get("ONEPIECE_DATA_ROOT", "data/chapter6"))
+GAS_HDF = Path(os.environ.get("ONEPIECE_DATA_ROOT", "data/chapter6")).parent / "Gas.hdf"
 CACHE_PATH = (
     PROJECT_ROOT
     / "notebooks"

@@ -86,11 +86,15 @@ pip install -e ./ui
 
 ## Quick start
 
-### 1. Open the tutorial UI
+### 1. Just launch it
 
 ```bash
-onepiece-studio tutorial
+onepiece-studio
 ```
+
+This opens a welcome page where you can explore the bundled tutorial
+dataset, open one of your own HDF/parquet datasets, or reopen a recent
+file. `onepiece-studio tutorial` jumps straight into the tutorial dataset.
 
 ### 2. Open an existing HDF database
 
@@ -110,6 +114,21 @@ onepiece-studio doctor
 onepiece-studio qa
 ```
 
+Audit a managed dataset for FAIR provenance before sharing it:
+
+```bash
+onepiece-studio fair-audit ".onepiece/workspace/mnvo_oer_surface_screening" \
+  --require-reference-scheme \
+  --require-publication-metadata
+```
+
+Export interoperable RO-Crate-style JSON-LD metadata:
+
+```bash
+onepiece-studio ro-crate ".onepiece/workspace/mnvo_oer_surface_screening" \
+  --output ro-crate-metadata.json
+```
+
 ## New student path
 
 For a new student in a research group, the recommended first sequence is:
@@ -124,6 +143,8 @@ Then continue with the docs pages:
 
 - [First Day Guide For A Bachelor Student](docs/source/first_day_student.md)
 - [Load Your First Lab Dataset](docs/source/load_first_lab_dataset.md)
+- [Canonical DataFrame Schema](docs/source/dataframe_schema.md)
+- [From Notebook To FAIR Dataset](docs/source/from_notebook_to_fair_dataset.md)
 
 ## Backend example
 
@@ -304,14 +325,34 @@ validate, document, and test.
 ## Repository layout
 
 ```text
-PFUI/
+OnePiece/
 ├── pyproject.toml            # onepiece backend package
 ├── ui/pyproject.toml         # onepiece-studio frontend package
 ├── src/onepiece/             # backend code
-├── src/onepiece_studio/      # frontend code
+├── ui/src/onepiece_studio/   # frontend code
 ├── tests/                    # package tests
 ├── docs/                     # Sphinx documentation and reports
-└── notebooks/                # worked examples and analysis notebooks
+├── examples/                 # runnable Streamlit example apps
+├── scripts/                  # maintenance and figure-generation scripts
+├── notebooks/                # worked examples and analysis notebooks
+└── reports/                  # generated analysis reports
+```
+
+### Dataset paths and environment variables
+
+Example apps, scripts, and tutorial notebooks resolve dataset and project
+locations from environment variables (each with a repo-relative fallback), so
+no machine-specific paths are hardcoded:
+
+| Variable | Purpose | Default |
+| --- | --- | --- |
+| `ONEPIECE_DATA_ROOT` | directory holding the input HDF datasets | `data/...` |
+| `ONEPIECE_PROJECT_ROOT` | repository root used to place generated outputs | current working directory |
+| `DFTDATAFRAME_SRC` | optional path to a local `DFTDataFrame` checkout | `src` |
+
+```bash
+export ONEPIECE_DATA_ROOT="/path/to/your/hdf_datasets"
+python examples/cuga_full_streamlit.py
 ```
 
 ## Package architecture
@@ -345,8 +386,47 @@ them. For larger and more stable workflows, the direction is:
 - parquet tables for row-wise data
 - sidecar tables for charges, DOS, and other long-form data
 - xarray-backed dense volumetric data where appropriate
+- JSON-native provenance records with entities, activities, agents, and FAIR metadata
 
 This keeps the scientific row model intact while scaling better than one giant pickled object table.
+
+## FAIR and provenance
+
+OnePiece follows a local-first interpretation of FAIR data for computational
+catalysis. A saved dataset should be findable through a stable dataset id and
+manifest, accessible as ordinary local files, interoperable through pandas, ASE,
+parquet/HDF, xarray, and JSON metadata, and reusable because the reference
+scheme, workflow parameters, software version, and source files are recorded.
+
+This is not a replacement for [AiiDA](https://aiida.net). AiiDA is a full
+workflow management system with automatic provenance tracking for calculation
+graphs. OnePiece is a lightweight post-processing and analysis layer, but it
+uses the same core idea: raw files, derived tables, workflow operations, and
+software agents should be linked explicitly. Managed datasets therefore store a
+provenance payload in `manifest.json`.
+
+Backend workflow execution also returns an audit log for each enabled operation,
+including operation parameters, row/column changes, success or failure status,
+and the derived dataframe entity. That audit log is the bridge between a normal
+ASE/pandas analysis script and a more AiiDA-like provenance graph.
+Pass `workflow.audit_log` to `save_dataset(...)` when persisting a derived table
+so the manifest records how its columns were created.
+
+For catalysis-specific reuse, `onepiece.provenance.ReferenceScheme` records
+the thermodynamic convention behind adsorption or free-energy columns, including
+gas references, CHE potential/pH terms, corrections, temperature, and pressure.
+For interoperability, `onepiece.provenance.ro_crate_metadata(...)` can translate
+the same provenance payload into an RO-Crate-style JSON-LD document.
+
+See [`docs/source/fair_and_provenance.md`](docs/source/fair_and_provenance.md)
+for the chemistry-facing explanation.
+
+For electrochemical and published-data workflows, start with:
+
+- [Electrochemical OER Tutorial](docs/source/electrochemical_oer_tutorial.md)
+- [CO2 Reduction And Methanol Reference Tutorial](docs/source/co2rr_methanol_reference_tutorial.md)
+- [Published DFT Data Intake](docs/source/published_dft_data_intake.md)
+- [Repository Artifact Policy](docs/source/artifact_policy.md)
 
 ## Documentation
 
@@ -375,8 +455,8 @@ workflow improvements flow back into the commons.
 
 Current release line:
 
-- backend: `onepiece 1.0.0`
-- frontend: `onepiece-studio 1.0.0`
+- backend: `onepiece 1.0.1`
+- frontend: `onepiece-studio 1.0.1`
 
 The project is already usable for real local datasets, but it is still in the stage where careful
 QA, example datasets, and explicit scientific conventions matter more than broad generality.

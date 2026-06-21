@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "onepiece-studio"
-version = "1.0.0"
+version = "1.0.1"
 description = "Streamlit frontend package for OnePiece scientific datasets and workflows."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -34,9 +34,9 @@ classifiers = [
   "Topic :: Scientific/Engineering :: Information Analysis",
 ]
 dependencies = [
-  "onepiece[performance]>=1.0.0,<2.0.0",
+  "onepiece[performance]>=1.0.1,<2.0.0",
   "pillow>=10.0",
-  "streamlit>=1.35",
+  "streamlit>=1.36",
   "plotly>=5.20",
 ]
 

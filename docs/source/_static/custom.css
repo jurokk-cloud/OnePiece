@@ -1,8 +1,8 @@
 :root {
-  --font-stack: "Lucifer", system-ui, sans-serif;
-  --font-stack--monospace: "Lucifer", ui-monospace, monospace;
-  --font-stack--headings: "Lucifer", system-ui, sans-serif;
-  --font-stack--ui: "Lucifer", system-ui, sans-serif;
+  --font-stack: system-ui, sans-serif;
+  --font-stack--monospace: ui-monospace, monospace;
+  --font-stack--headings: system-ui, sans-serif;
+  --font-stack--ui: system-ui, sans-serif;
 }
 
 html,
@@ -30,7 +30,7 @@ select,
 .content pre,
 .highlight,
 .highlight pre {
-  font-family: "Lucifer", system-ui, sans-serif !important;
+  font-family: system-ui, sans-serif !important;
 }
 
 .math,

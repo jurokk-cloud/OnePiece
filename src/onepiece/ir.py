@@ -170,7 +170,29 @@ def plot_adsorption_energy_vs_frequency(
     co_frequency_scaling: float = DEFAULT_CO_FREQUENCY_SCALING,
     frequency_window_cm1: float = 50.0,
 ):
-    """Plot adsorption energy on x and matched frequency on y for CO and CH3O rows."""
+    """Plot adsorption energy on x and matched frequency on y for CO and CH3O rows.
+
+    Expects a frame that already carries adsorption energies and IR peak
+    matches (see :func:`onepiece.ir.add_ir_peak_matches`). Returns a
+    matplotlib ``(figure, axes)`` pair with one panel per adsorbate species.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        import onepiece
+        from onepiece.ir import add_ir_peak_matches
+
+        combined, _refs = onepiece.assign_references_before_merge(
+            {"demo": "calculations.hdf"}
+        )
+        combined = onepiece.add_adsorption_energies(
+            combined, {"CO": -14.8, "CH3OH": -30.2, "H2": -6.8}
+        )
+        combined = add_ir_peak_matches(combined)
+        fig, axes = onepiece.plot_adsorption_energy_vs_frequency(combined)
+        fig.savefig("adsorption_vs_frequency.png")
+    """
     try:
         import matplotlib.pyplot as plt
         import seaborn as sns

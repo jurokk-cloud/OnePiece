@@ -13,6 +13,7 @@ import pandas as pd
 from pandas.api.types import is_bool_dtype, is_datetime64_any_dtype, is_numeric_dtype
 
 from onepiece.frame_utils import ensure_name_index
+from onepiece.provenance import ReferenceScheme, attach_workflow_audit_log, build_dataset_provenance
 
 STORAGE_MANIFEST_NAME = "manifest.json"
 STORAGE_SCHEMA_VERSION = 1
@@ -42,6 +43,7 @@ class DatasetManifest:
     columns: list[str]
     object_columns: list[str] = field(default_factory=list)
     metadata: dict[str, Any] = field(default_factory=dict)
+    provenance: dict[str, Any] = field(default_factory=dict)
 
 
 def resolve_storage_config(root: str | Path | None = None) -> StorageConfig:
@@ -85,7 +87,29 @@ def save_dataset(
     area: str = "workspace",
     source_path: str | None = None,
     metadata: dict[str, Any] | None = None,
+    provenance: dict[str, Any] | None = None,
+    reference_scheme: ReferenceScheme | dict[str, Any] | None = None,
+    workflow_audit_log: list[dict[str, Any]] | None = None,
 ) -> Path:
+    """Persist a dataframe as a managed dataset and return its manifest path.
+
+    The dataset is written under ``config``'s directory layout as parquet
+    (default) or HDF, together with a ``manifest.json`` describing the schema.
+    Columns holding Python objects (for example ASE ``Atoms``) go to a pickle
+    sidecar so the tabular file stays portable.
+
+    Examples
+    --------
+    >>> import tempfile
+    >>> import pandas as pd
+    >>> import onepiece
+    >>> from onepiece.storage import resolve_storage_config
+    >>> frame = pd.DataFrame({"Name": ["Cu211", "Cu211-CO"], "E": [-100.0, -115.2]})
+    >>> config = resolve_storage_config(tempfile.mkdtemp())
+    >>> manifest_path = onepiece.save_dataset(frame, dataset_id="demo", config=config)
+    >>> manifest_path.name
+    'manifest.json'
+    """
     ensure_storage_layout(config)
     dataset_dir = dataset_directory(config, dataset_id, area=area)
     dataset_dir.mkdir(parents=True, exist_ok=True)
@@ -95,6 +119,21 @@ def save_dataset(
     prepared[ROW_ID_COLUMN] = range(len(prepared))
     object_columns = _object_sidecar_columns(normalized)
     manifest: DatasetManifest
+    provenance_payload = provenance or build_dataset_provenance(
+        dataset_id=dataset_id,
+        source_path=source_path,
+        operation="save_dataset",
+        parameters={
+            "storage_format": storage_format.lower(),
+            "area": area,
+            "rows": int(len(normalized)),
+            "columns": [str(column) for column in normalized.columns],
+            "object_columns": object_columns,
+        },
+        software_version=_onepiece_version(),
+        reference_scheme=reference_scheme,
+    ).to_dict()
+    provenance_payload = attach_workflow_audit_log(provenance_payload, workflow_audit_log)
 
     if storage_format.lower() == "parquet":
         table_file = "table.parquet"
@@ -122,6 +161,7 @@ def save_dataset(
             columns=[str(column) for column in normalized.columns],
             object_columns=object_columns,
             metadata=metadata or {},
+            provenance=provenance_payload,
         )
     elif storage_format.lower() == "hdf":
         table_file = "table.hdf"
@@ -139,6 +179,7 @@ def save_dataset(
             columns=[str(column) for column in normalized.columns],
             object_columns=[],
             metadata=metadata or {},
+            provenance=provenance_payload,
         )
     else:
         raise ValueError(f"Unsupported storage_format: {storage_format}")
@@ -149,6 +190,30 @@ def save_dataset(
 
 
 def load_dataset(path: str | Path) -> tuple[pd.DataFrame, DatasetManifest | None]:
+    """Load a dataset saved by :func:`save_dataset`, or a bare data file.
+
+    Accepts a managed dataset directory (or its ``manifest.json``), a parquet
+    file, or a pandas HDF file. The manifest is ``None`` when loading a bare
+    file. The returned frame always has a ``Name`` index.
+
+    Examples
+    --------
+    >>> import tempfile
+    >>> import pandas as pd
+    >>> import onepiece
+    >>> from onepiece.storage import resolve_storage_config
+    >>> config = resolve_storage_config(tempfile.mkdtemp())
+    >>> manifest_path = onepiece.save_dataset(
+    ...     pd.DataFrame({"Name": ["Cu211", "Cu211-CO"], "E": [-100.0, -115.2]}),
+    ...     dataset_id="demo",
+    ...     config=config,
+    ... )
+    >>> frame, manifest = onepiece.load_dataset(manifest_path.parent)
+    >>> list(frame.index)
+    ['Cu211', 'Cu211-CO']
+    >>> manifest.storage_format
+    'parquet'
+    """
     source = Path(path).expanduser()
     if source.is_dir():
         manifest_path = source / STORAGE_MANIFEST_NAME
@@ -274,3 +339,11 @@ def _slugify_dataset_id(value: str) -> str:
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def _onepiece_version() -> str | None:
+    try:
+        from onepiece import __version__
+    except Exception:
+        return None
+    return str(__version__)

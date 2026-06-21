@@ -3,6 +3,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 from ase import Atoms
+from ase.build import bulk
 
 from onepiece import apply_operation
 from onepiece.ase_analysis import (
@@ -14,12 +15,15 @@ from onepiece.ase_analysis import (
     compare_structures_rmsd,
     compute_d_band_center,
     compute_d_band_filling,
+    CoordinationEnvironment,
+    coordination_environment,
     coordination_numbers,
     detect_adsorbate_desorption,
     detect_adsorbate_dissociation,
     detect_overlapping_atoms,
     detect_unphysical_bonds,
     generalized_coordination_numbers,
+    plot_structure_value_3d,
     identify_surface_atom_indices,
     infer_atomic_layers,
     reaction_path_geometry_summary,
@@ -79,6 +83,32 @@ def test_layer_coordination_and_site_descriptors() -> None:
     assert distance_summary["min_adsorbate_surface_distance"] < 1.3
     assert classify_adsorption_site(ads, slab) == "top"
     assert np.isclose(adsorbate_orientation_angle(ads, slab), 0.0)
+
+
+def test_coordination_environment_reuses_packed_graph_for_large_clusters() -> None:
+    cluster = bulk("Cu", "fcc", a=3.6, cubic=True).repeat((3, 3, 3))
+    cluster.pbc = False
+    cluster.cell = cluster.cell * 1.5
+
+    environment = coordination_environment(cluster)
+
+    assert isinstance(environment, CoordinationEnvironment)
+    assert environment.natoms == len(cluster)
+    assert environment.indptr.shape == (len(cluster) + 1,)
+    assert environment.indices.ndim == 1
+    assert environment.coordination.shape == (len(cluster),)
+    assert environment.indices.dtype == np.int32
+    assert environment.coordination.dtype == np.int32
+
+    coordination_from_environment = coordination_numbers(environment)
+    coordination_from_atoms = coordination_numbers(cluster)
+    gcn_from_environment = generalized_coordination_numbers(environment)
+    gcn_from_atoms = generalized_coordination_numbers(cluster)
+
+    np.testing.assert_allclose(coordination_from_environment, coordination_from_atoms)
+    np.testing.assert_allclose(gcn_from_environment, gcn_from_atoms)
+    assert np.isfinite(gcn_from_environment).all()
+    assert float(np.mean(coordination_from_environment)) > 0.0
 
 
 def test_structure_comparison_reconstruction_and_path_summary() -> None:
@@ -173,3 +203,14 @@ def test_dataframe_descriptor_workbench_and_workflow_operation() -> None:
     )
     workflow_row = workflow.loc[workflow["Name"] == "Cu-211-clean-CO-1"].iloc[0]
     assert workflow_row["adsorption_site"] == "top"
+
+
+def test_plot_structure_value_3d_returns_figure_for_gcn_values() -> None:
+    cluster = bulk("Cu", "fcc", a=3.6, cubic=True)
+    cluster.pbc = False
+    values = generalized_coordination_numbers(cluster)
+
+    fig, ax = plot_structure_value_3d(cluster, values, "GCN test")
+
+    assert fig is not None
+    assert ax.get_title() == "GCN test"

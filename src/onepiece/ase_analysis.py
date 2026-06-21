@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from collections import deque
+from dataclasses import dataclass
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -11,9 +12,12 @@ from ase import Atoms
 from ase.data import atomic_numbers, covalent_radii
 from ase.neighborlist import NeighborList, natural_cutoffs
 
+from onepiece._compat import trapezoid
 from onepiece.adsorption import assign_surface_references, primary_structure
+from onepiece.frame_utils import ensure_name_index, row_name
 from onepiece.vasp import (
     DoscarData,
+    _as_array,
     adsorbate_atom_indices_from_structures,
     matched_surface_atom_indices_from_structures,
     read_doscar,
@@ -21,6 +25,90 @@ from onepiece.vasp import (
 
 SURFACE_NORMAL = np.array([0.0, 0.0, 1.0], dtype=float)
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True, slots=True)
+class CoordinationEnvironment:
+    """Packed coordination graph for efficient repeated local-environment calculations."""
+
+    indptr: np.ndarray
+    indices: np.ndarray
+    coordination: np.ndarray
+    cutoff_scale: float = 1.2
+
+    @property
+    def natoms(self) -> int:
+        return int(self.coordination.shape[0])
+
+    def neighbors_of(self, atom_index: int) -> np.ndarray:
+        index = int(atom_index)
+        start = int(self.indptr[index])
+        stop = int(self.indptr[index + 1])
+        return self.indices[start:stop]
+
+    def to_neighbor_graph(self) -> list[list[int]]:
+        return [self.neighbors_of(atom_index).astype(int, copy=False).tolist() for atom_index in range(self.natoms)]
+
+    def generalized_coordination_numbers(self, *, max_coordination: float = 12.0) -> np.ndarray:
+        denominator = float(max(max_coordination, 1.0))
+        gcn = np.zeros(self.natoms, dtype=float)
+        if self.indices.size == 0:
+            return gcn
+        weights = self.coordination[self.indices].astype(float, copy=False)
+        starts = self.indptr[:-1]
+        nonempty = self.indptr[1:] > starts
+        if np.any(nonempty):
+            gcn[nonempty] = np.add.reduceat(weights, starts[nonempty]) / denominator
+        return gcn
+
+
+def coordination_environment(atoms: Atoms, *, cutoff_scale: float = 1.2) -> CoordinationEnvironment:
+    if len(atoms) == 0:
+        empty = np.zeros(0, dtype=np.int32)
+        return CoordinationEnvironment(
+            indptr=np.zeros(1, dtype=np.int32),
+            indices=empty,
+            coordination=empty,
+            cutoff_scale=float(cutoff_scale),
+        )
+
+    cutoffs = natural_cutoffs(atoms, mult=cutoff_scale)
+    neighbors = NeighborList(cutoffs, self_interaction=False, bothways=True)
+    neighbors.update(atoms)
+
+    flat_neighbors: list[np.ndarray] = []
+    indptr = np.zeros(len(atoms) + 1, dtype=np.int32)
+    coordination = np.zeros(len(atoms), dtype=np.int32)
+    cursor = 0
+    for atom_index in range(len(atoms)):
+        indices, _ = neighbors.get_neighbors(atom_index)
+        if len(indices):
+            unique = np.unique(np.asarray(indices, dtype=np.int32))
+            unique = unique[unique != atom_index]
+        else:
+            unique = np.zeros(0, dtype=np.int32)
+        flat_neighbors.append(unique)
+        coordination[atom_index] = np.int32(unique.size)
+        cursor += int(unique.size)
+        indptr[atom_index + 1] = np.int32(cursor)
+
+    packed = np.concatenate(flat_neighbors).astype(np.int32, copy=False) if flat_neighbors else np.zeros(0, dtype=np.int32)
+    return CoordinationEnvironment(
+        indptr=indptr,
+        indices=packed,
+        coordination=coordination,
+        cutoff_scale=float(cutoff_scale),
+    )
+
+
+def _coerce_coordination_environment(
+    atoms_or_environment: Atoms | CoordinationEnvironment,
+    *,
+    cutoff_scale: float = 1.2,
+) -> CoordinationEnvironment:
+    if isinstance(atoms_or_environment, CoordinationEnvironment):
+        return atoms_or_environment
+    return coordination_environment(atoms_or_environment, cutoff_scale=cutoff_scale)
 
 
 def infer_atomic_layers(atoms: Atoms, *, axis: int = 2, tolerance: float = 0.75) -> np.ndarray:
@@ -89,25 +177,206 @@ def nearest_neighbor_distances(atoms: Atoms, *, mic: bool = True) -> np.ndarray:
     return nearest
 
 
-def coordination_numbers(atoms: Atoms, *, cutoff_scale: float = 1.2) -> np.ndarray:
-    return np.asarray([len(neighbors) for neighbors in neighbor_graph(atoms, cutoff_scale=cutoff_scale)], dtype=float)
+def coordination_numbers(
+    atoms_or_environment: Atoms | CoordinationEnvironment,
+    *,
+    cutoff_scale: float = 1.2,
+) -> np.ndarray:
+    environment = _coerce_coordination_environment(atoms_or_environment, cutoff_scale=cutoff_scale)
+    return environment.coordination.astype(float, copy=True)
 
 
 def generalized_coordination_numbers(
-    atoms: Atoms,
+    atoms_or_environment: Atoms | CoordinationEnvironment,
     *,
     cutoff_scale: float = 1.2,
     max_coordination: float = 12.0,
 ) -> np.ndarray:
-    graph = neighbor_graph(atoms, cutoff_scale=cutoff_scale)
-    coordination = np.asarray([len(neighbors) for neighbors in graph], dtype=float)
-    denominator = float(max(max_coordination, 1.0))
-    gcn = np.zeros(len(atoms), dtype=float)
-    for index, neighbors in enumerate(graph):
-        if not neighbors:
+    environment = _coerce_coordination_environment(atoms_or_environment, cutoff_scale=cutoff_scale)
+    return environment.generalized_coordination_numbers(max_coordination=max_coordination)
+
+
+def plot_structure_value_3d(
+    atoms: Atoms,
+    values: Sequence[float],
+    title: str,
+    *,
+    elev: float = 20.0,
+    azim: float = 120.0,
+    size: float = 400.0,
+    colorbar_ticks: Sequence[float] | None = None,
+    edgecolors: str | Sequence[str] | None = None,
+    cmap: str = "nipy_spectral",
+    vmin: float | None = None,
+    vmax: float | None = None,
+):
+    """Plot per-atom ``values`` as a 3D scatter over an ASE structure.
+
+    .. code-block:: python
+
+        from onepiece import plot_structure_value_3d
+
+        fig = plot_structure_value_3d(atoms, gcn_values, title="GCN")
+    """
+    try:
+        import matplotlib.cm as cm
+        import matplotlib.colors as mcolors
+        import matplotlib.pyplot as plt
+    except Exception as exc:  # pragma: no cover
+        raise RuntimeError("matplotlib is required for 3D structure plots.") from exc
+
+    data = np.asarray(values, dtype=float).reshape(-1)
+    if data.shape[0] != len(atoms):
+        raise ValueError("values must have the same length as atoms.")
+
+    positions = np.asarray(atoms.get_positions(), dtype=float)
+    finite = np.isfinite(data)
+    if not finite.any():
+        raise ValueError("values does not contain any finite entries to plot.")
+
+    lower = float(np.nanmin(data[finite])) if vmin is None else float(vmin)
+    upper = float(np.nanmax(data[finite])) if vmax is None else float(vmax)
+    if np.isclose(lower, upper):
+        lower -= 0.5
+        upper += 0.5
+    normalize = mcolors.Normalize(vmin=lower, vmax=upper)
+    colormap = plt.get_cmap(cmap)
+
+    fig = plt.figure()
+    ax = fig.add_subplot(projection="3d", title=title)
+    ax.scatter(
+        positions[finite, 0],
+        positions[finite, 1],
+        positions[finite, 2],
+        c=colormap(normalize(data[finite])),
+        s=size,
+        alpha=1.0,
+        edgecolors=edgecolors,
+    )
+    if (~finite).any():
+        ax.scatter(
+            positions[~finite, 0],
+            positions[~finite, 1],
+            positions[~finite, 2],
+            c="#d9d9d9",
+            s=size * 0.75,
+            alpha=0.35,
+            edgecolors=edgecolors,
+        )
+
+    ax.set_xlabel("a")
+    ax.set_ylabel("b")
+    ax.set_zlabel("c")
+    ax.view_init(elev=elev, azim=azim)
+    scalarmappable = cm.ScalarMappable(norm=normalize, cmap=colormap)
+    scalarmappable.set_array(data[finite])
+    ax.axis("off")
+    ax.set_aspect("equal")
+    fig.colorbar(scalarmappable, ticks=colorbar_ticks, ax=ax)
+    return fig, ax
+
+
+def plot_row_metric_3d(
+    row: pd.Series,
+    value_column: str,
+    *,
+    structure_column: str = "struc",
+    title: str | None = None,
+    elev: float = 20.0,
+    azim: float = 120.0,
+    size: float = 400.0,
+    colorbar_ticks: Sequence[float] | None = None,
+    edgecolors: str | Sequence[str] | None = None,
+    cmap: str = "nipy_spectral",
+    vmin: float | None = None,
+    vmax: float | None = None,
+):
+    """Plot a per-atom metric column for a single dataframe row in 3D.
+
+    .. code-block:: python
+
+        from onepiece import plot_row_metric_3d
+
+        fig = plot_row_metric_3d(frame.iloc[0], "atomic_charge_e")
+    """
+    atoms = row.get(structure_column)
+    if atoms is None or atoms.__class__.__name__ != "Atoms":
+        raise ValueError(f"Row does not contain an ASE Atoms object in column '{structure_column}'.")
+    values = _as_array(row.get(value_column))
+    if values is None:
+        raise ValueError(f"Row does not contain numeric values in column '{value_column}'.")
+    resolved_title = title or f"{row_name(row)} | {value_column}"
+    return plot_structure_value_3d(
+        atoms,
+        values,
+        resolved_title,
+        elev=elev,
+        azim=azim,
+        size=size,
+        colorbar_ticks=colorbar_ticks,
+        edgecolors=edgecolors,
+        cmap=cmap,
+        vmin=vmin,
+        vmax=vmax,
+    )
+
+
+def save_dataframe_metric_plots_3d(
+    frame: pd.DataFrame,
+    metric_columns: Sequence[str],
+    *,
+    output_dir: Path | str,
+    structure_column: str = "struc",
+    elev: float = 20.0,
+    azim: float = 120.0,
+    size: float = 400.0,
+    cmap: str = "nipy_spectral",
+) -> pd.DataFrame:
+    """Save a 3D metric plot per metric column and return an index frame.
+
+    .. code-block:: python
+
+        from onepiece import save_dataframe_metric_plots_3d
+
+        index = save_dataframe_metric_plots_3d(
+            frame, ["atomic_charge_e"], output_dir="plots"
+        )
+    """
+    try:
+        import matplotlib.pyplot as plt
+    except Exception as exc:  # pragma: no cover
+        raise RuntimeError("matplotlib is required for 3D structure plots.") from exc
+
+    df = ensure_name_index(frame)
+    destination = Path(output_dir)
+    destination.mkdir(parents=True, exist_ok=True)
+    records: list[dict[str, object]] = []
+
+    for _, row in df.iterrows():
+        atoms = row.get(structure_column)
+        if atoms is None or atoms.__class__.__name__ != "Atoms":
             continue
-        gcn[index] = float(sum(coordination[neighbor] for neighbor in neighbors) / denominator)
-    return gcn
+        name = row_name(row)
+        for metric in metric_columns:
+            values = _as_array(row.get(metric))
+            if values is None or values.shape[0] != len(atoms) or not np.isfinite(values).any():
+                continue
+            fig, _ = plot_structure_value_3d(
+                atoms,
+                values,
+                f"{name} | {metric}",
+                elev=elev,
+                azim=azim,
+                size=size,
+                cmap=cmap,
+            )
+            filename = f"{_slugify(name)}__{_slugify(metric)}.png"
+            output_path = destination / filename
+            fig.savefig(output_path, dpi=200, bbox_inches="tight")
+            plt.close(fig)
+            records.append({"Name": name, "metric": metric, "plot_path": str(output_path)})
+
+    return pd.DataFrame(records)
 
 
 def map_atoms_by_species_and_position(reference_atoms: Atoms, target_atoms: Atoms) -> list[int]:
@@ -315,10 +584,10 @@ def compute_d_band_center(
     if not mask.any():
         return float("nan")
     weights = signal[mask]
-    norm = float(np.trapz(weights, energies[mask]))
+    norm = float(trapezoid(weights, energies[mask]))
     if abs(norm) < 1e-12:
         return float("nan")
-    return float(np.trapz(energies[mask] * weights, energies[mask]) / norm)
+    return float(trapezoid(energies[mask] * weights, energies[mask]) / norm)
 
 
 def compute_d_band_filling(
@@ -334,10 +603,10 @@ def compute_d_band_filling(
     occupied_mask = _window_mask(energies, (energy_window[0], min(energy_window[1], 0.0)))
     if not occupied_mask.any():
         return 0.0
-    occupied = float(np.trapz(signal[occupied_mask], energies[occupied_mask]))
+    occupied = float(trapezoid(signal[occupied_mask], energies[occupied_mask]))
     if not normalize:
         return occupied
-    total = float(np.trapz(signal[total_mask], energies[total_mask])) if total_mask.any() else 0.0
+    total = float(trapezoid(signal[total_mask], energies[total_mask])) if total_mask.any() else 0.0
     if abs(total) < 1e-12:
         return float("nan")
     return float(occupied / total)
@@ -456,6 +725,9 @@ def add_ase_analysis_descriptors(
     ):
         if column not in df.columns:
             df[column] = np.nan
+    for column in ("atomic_coordination_numbers", "atomic_generalized_coordination_numbers"):
+        if column not in df.columns:
+            df[column] = None
     for column in ("adsorption_site",):
         if column not in df.columns:
             df[column] = ""
@@ -476,14 +748,23 @@ def add_ase_analysis_descriptors(
         df.at[index, "slab_thickness"] = slab_thickness(surface_atoms)
         df.at[index, "vacuum_thickness"] = vacuum_thickness(surface_atoms)
 
-        coordination = coordination_numbers(active_atoms)
-        gcn = generalized_coordination_numbers(active_atoms)
+        environment = coordination_environment(active_atoms)
+        coordination = coordination_numbers(environment)
+        gcn = generalized_coordination_numbers(environment)
+        df.at[index, "atomic_coordination_numbers"] = coordination.tolist() if coordination.size else None
+        df.at[index, "atomic_generalized_coordination_numbers"] = gcn.tolist() if gcn.size else None
         if coordination.size:
             df.at[index, "mean_coordination"] = float(np.mean(coordination))
             df.at[index, "min_coordination"] = float(np.min(coordination))
             df.at[index, "max_coordination"] = float(np.max(coordination))
         if gcn.size:
             df.at[index, "mean_generalized_coordination"] = float(np.mean(gcn))
+            symbols = np.asarray(active_atoms.get_chemical_symbols())
+            for symbol in sorted(set(symbols)):
+                symbol_values = gcn[symbols == symbol]
+                df.at[index, f"average_{symbol}_GCN"] = float(np.mean(symbol_values))
+                df.at[index, f"min_{symbol}_GCN"] = float(np.min(symbol_values))
+                df.at[index, f"max_{symbol}_GCN"] = float(np.max(symbol_values))
 
         overlap = detect_overlapping_atoms(active_atoms)
         unphysical = detect_unphysical_bonds(active_atoms)
@@ -537,17 +818,7 @@ def add_ase_analysis_descriptors(
 
 
 def neighbor_graph(atoms: Atoms, *, cutoff_scale: float = 1.2) -> list[list[int]]:
-    if len(atoms) == 0:
-        return []
-    cutoffs = natural_cutoffs(atoms, mult=cutoff_scale)
-    neighbors = NeighborList(cutoffs, self_interaction=False, bothways=True)
-    neighbors.update(atoms)
-    graph: list[list[int]] = []
-    for atom_index in range(len(atoms)):
-        indices, _ = neighbors.get_neighbors(atom_index)
-        unique = sorted({int(index) for index in indices if int(index) != atom_index})
-        graph.append(unique)
-    return graph
+    return coordination_environment(atoms, cutoff_scale=cutoff_scale).to_neighbor_graph()
 
 
 def connected_component_count(graph: Sequence[Sequence[int]]) -> int:
@@ -611,6 +882,13 @@ def resolve_row_file_path(
     if calculation_value is None or pd.isna(calculation_value):
         return None
     return resolve_vasp_file(calculation_value, filename=filename)
+
+
+def _slugify(value: object) -> str:
+    text = str(value).strip()
+    if not text:
+        return "unnamed"
+    return "".join(ch.lower() if ch.isalnum() else "-" for ch in text).strip("-")
 
 
 def resolve_vasp_file(pathlike: Path | str, *, filename: str) -> Path:

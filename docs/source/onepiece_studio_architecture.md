@@ -130,7 +130,7 @@ src/onepiece/
 The frontend package should mostly be a controller and presentation layer.
 
 ```text
-src/onepiece_studio/
+ui/src/onepiece_studio/
   __init__.py
   app.py
   cli.py
@@ -328,9 +328,9 @@ These functions should move first because they currently sit too close to the UI
 
 Current source locations to extract from:
 
-- `src/onepiece_studio/ui/workflow_builder.py`
-- `src/onepiece_studio/ui/controlroom.py`
-- `src/onepiece_studio/ui/data_sources.py`
+- `ui/src/onepiece_studio/ui/workflow_builder.py`
+- `ui/src/onepiece_studio/ui/controlroom.py`
+- `ui/src/onepiece_studio/ui/data_sources.py`
 - `src/onepiece/adsorption.py`
 - `src/onepiece/automation.py`
 - `src/onepiece/thermo.py`

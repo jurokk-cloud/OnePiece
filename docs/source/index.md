@@ -34,6 +34,7 @@ api_usage
 quality_control
 changelog
 pandas_ase
+from_notebook_to_fair_dataset
 ```
 
 ```{toctree}
@@ -42,6 +43,8 @@ pandas_ase
 
 ase_user_guide
 ase_structures_in_dataframes
+dataframe_schema
+fair_and_provenance
 vasp_charge_and_dos
 xarray_vasp
 ase_to_ui_workflow_mapping
@@ -52,10 +55,16 @@ recommended_analysis_views
 :maxdepth: 2
 :caption: Package And Product Design
 
+backend_overview
+crawl_to_hdf_backend
+bundled_hdf_backend_tutorial
+function_inventory
+artifact_policy
 materials_workbench_design
 column_review
 logos
 onepiece_studio_architecture
+architecture_for_ase_catalysis
 onepiece_backend_api
 release_workflow
 ```
@@ -67,6 +76,9 @@ release_workflow
 visualization_recipes
 catalysis_hub_worked_example
 cuga_worked_example
+electrochemical_oer_tutorial
+co2rr_methanol_reference_tutorial
+published_dft_data_intake
 image_columns
 ```
 

@@ -92,6 +92,27 @@ The stable workflow payload is:
 OnePiece Studio may help users compose these payloads, but it should not execute their
 semantics itself.
 
+`apply_operations(...)` returns a `WorkflowResult` with three fields:
+
+- `dataframe`: the transformed DataFrame
+- `messages`: recoverable failure messages
+- `audit_log`: one JSON-native activity record per enabled operation
+
+The audit log is the backend provenance contract for dataframe transformations.
+Each activity records:
+
+- operation kind and label
+- input and output dataframe entities
+- operation parameters
+- row count before and after
+- columns added or removed
+- execution status
+- error text for failed steps
+
+This is intentionally close to AiiDA-style provenance thinking, but scoped to
+post-processing workflows: the operation that created a derived column should be
+recoverable from the saved project or manifest.
+
 ## Query and Controlroom Filtering
 
 These functions define how the active dataset is filtered.
@@ -118,6 +139,11 @@ These are the main scientific transforms currently exposed by the backend.
 - `onepiece.add_elemental_adsorption_energy(...)`
 - `onepiece.add_elemental_adsorption_free_energy(...)`
 - `onepiece.add_recipe_adsorption_energies(...)`
+
+For publication-grade catalysis work, adsorption operations should keep the
+reference scheme visible. A value such as `adsorption_energy = -0.72 eV` is not
+reusable without the clean-surface reference, gas/electrochemical basis, and
+corrections used to construct it.
 - `onepiece.add_catalysis_hub_adsorption_energies(...)`
 - `onepiece.copt_profile_points(...)`
 - `onepiece.copt_barrier_summary(...)`
@@ -146,6 +172,32 @@ These are the main scientific transforms currently exposed by the backend.
 - `onepiece.apply_curation_rules(...)`
 - `onepiece.annotate_reaction_network(...)`
 - `onepiece.add_structure_descriptors(...)`
+
+## Provenance And FAIR Metadata
+
+These functions define how derived datasets record scientific context:
+
+- `onepiece.ReferenceScheme`
+- `onepiece.build_dataset_provenance(...)`
+- `onepiece.validate_provenance_payload(...)`
+- `onepiece.provenance_graph(...)`
+- `onepiece.ro_crate_metadata(...)`
+- `onepiece.save_dataset(..., reference_scheme=..., workflow_audit_log=...)`
+
+The key rule is that reference conventions are part of the data product. A
+managed dataset that contains adsorption energies or free energies should carry
+a `ReferenceScheme` in manifest provenance.
+
+Recommended conventions:
+
+- gas-phase thermochemistry: `ReferenceScheme.gas_phase(...)`
+- electrochemistry: `ReferenceScheme.computational_hydrogen_electrode(...)`
+- imported article data: record citation, DOI/URL, license, and conversion notes
+  in manifest metadata
+
+For external datasets from research articles, normalize the table first, then
+save it as a managed OnePiece dataset with provenance before using it in the UI
+or tutorial examples.
 
 ## Crawl And Import
 

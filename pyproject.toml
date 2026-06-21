@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "onepiece"
-version = "1.0.0"
+version = "1.0.1"
 description = "Backend package for local scientific dataframe workflows with ASE, thermochemistry, adsorption, and VASP analysis."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -51,10 +51,11 @@ performance = [
 ]
 studio = [
   "pillow>=10.0",
-  "streamlit>=1.35",
+  "streamlit>=1.36",
   "plotly>=5.20",
   "polars>=1.0",
   "matplotlib>=3.8",
+  "seaborn>=0.13",
 ]
 dev = [
   "bandit>=1.9",
@@ -62,10 +63,11 @@ dev = [
   "pytest>=8.0",
   "ruff>=0.4",
   "pillow>=10.0",
-  "streamlit>=1.35",
+  "streamlit>=1.36",
   "plotly>=5.20",
   "polars>=1.0",
   "matplotlib>=3.8",
+  "seaborn>=0.13",
 ]
 release = [
   "build>=1.2",
@@ -79,6 +81,7 @@ docs = [
   "myst-parser>=3.0",
   "playwright>=1.45",
   "matplotlib>=3.8",
+  "seaborn>=0.13",
 ]
 
 [tool.setuptools]

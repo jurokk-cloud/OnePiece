@@ -36,15 +36,15 @@
   </g>
 
   <g transform="translate(330 82)">
-    <text x="0" y="72" font-family="Lucifer, 'Lucifer Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="72" font-weight="750" letter-spacing="0" fill="#17212b">OnePiece Studio</text>
-    <text x="4" y="122" font-family="Lucifer, 'Lucifer Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="30" font-weight="520" letter-spacing="0" fill="#52616c">Local Materials Workbench</text>
+    <text x="0" y="72" font-family="system-ui, 'system-ui', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="72" font-weight="750" letter-spacing="0" fill="#17212b">OnePiece Studio</text>
+    <text x="4" y="122" font-family="system-ui, 'system-ui', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="30" font-weight="520" letter-spacing="0" fill="#52616c">Local Materials Workbench</text>
     <g transform="translate(4 154)">
       <rect x="0" y="0" width="104" height="28" rx="8" fill="#eaf3f4" stroke="#bfd2d5"/>
       <rect x="120" y="0" width="124" height="28" rx="8" fill="#fff2e7" stroke="#e5c1a4"/>
       <rect x="260" y="0" width="102" height="28" rx="8" fill="#eef0f6" stroke="#cbd1df"/>
-      <text x="16" y="19" font-family="Lucifer, 'Lucifer Sans', sans-serif" font-size="14" font-weight="650" fill="#2f7f8c">filter</text>
-      <text x="136" y="19" font-family="Lucifer, 'Lucifer Sans', sans-serif" font-size="14" font-weight="650" fill="#b85a34">phase map</text>
-      <text x="276" y="19" font-family="Lucifer, 'Lucifer Sans', sans-serif" font-size="14" font-weight="650" fill="#5b647c">trace rows</text>
+      <text x="16" y="19" font-family="system-ui, 'system-ui', sans-serif" font-size="14" font-weight="650" fill="#2f7f8c">filter</text>
+      <text x="136" y="19" font-family="system-ui, 'system-ui', sans-serif" font-size="14" font-weight="650" fill="#b85a34">phase map</text>
+      <text x="276" y="19" font-family="system-ui, 'system-ui', sans-serif" font-size="14" font-weight="650" fill="#5b647c">trace rows</text>
     </g>
   </g>
 </svg>

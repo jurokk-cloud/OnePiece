@@ -6,6 +6,7 @@ from typing import Literal
 import numpy as np
 import xarray as xr
 
+from onepiece._compat import trapezoid
 from onepiece.vasp import ChgcarData, DoscarData, read_chgcar, read_doscar
 
 AxisName = Literal["x", "y", "z"]
@@ -195,7 +196,7 @@ def doscar_integrated_pdos(
         orbitals=orbitals,
         energy_window=energy_window,
     )
-    integrated = float(np.trapz(signal.to_numpy(), signal["energy"].to_numpy()))
+    integrated = float(trapezoid(signal.to_numpy(), signal["energy"].to_numpy()))
     return xr.DataArray(
         integrated,
         attrs={
@@ -225,11 +226,11 @@ def doscar_orbital_band_center(
     )
     energies = np.asarray(signal["energy"].to_numpy(), dtype=float)
     values = np.asarray(signal.to_numpy(), dtype=float)
-    denominator = float(np.trapz(values, energies))
+    denominator = float(trapezoid(values, energies))
     if np.isclose(denominator, 0.0):
         band_center = np.nan
     else:
-        band_center = float(np.trapz(energies * values, energies) / denominator)
+        band_center = float(trapezoid(energies * values, energies) / denominator)
     return xr.DataArray(
         band_center,
         attrs={

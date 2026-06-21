@@ -46,14 +46,16 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     env = os.environ.copy()
-    env["PYTHONPATH"] = str(ROOT / "src")
 
+    require_module("onepiece", "python -m pip install -e '.[dev]'")
+    require_module("onepiece_studio", "python -m pip install -e ./ui")
     if not args.skip_lint:
         require_module("ruff", "python -m pip install -e '.[dev]'")
-        run([sys.executable, "-m", "ruff", "check", "src", "tests", "examples"], env=env)
+        run([sys.executable, "-m", "ruff", "check", "src", "ui/src", "tests", "examples"], env=env)
     run([sys.executable, "-m", "pytest", "-q"], env=env)
     run([sys.executable, "-m", "onepiece_studio.cli", "qa"], env=env)
-    run([sys.executable, "-m", "py_compile", *[str(path) for path in sorted((ROOT / "src").rglob("*.py"))]], env=env)
+    source_files = sorted((ROOT / "src").rglob("*.py")) + sorted((ROOT / "ui" / "src").rglob("*.py"))
+    run([sys.executable, "-m", "py_compile", *[str(path) for path in source_files]], env=env)
 
     if not args.skip_docs:
         require_module("sphinx", "python -m pip install -e '.[docs]'")

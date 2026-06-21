@@ -5,47 +5,121 @@ from typing import Any
 
 import pandas as pd
 
-from onepiece import (
+from onepiece.dftdataframe_import import (
+    crawl_root_to_frame as backend_crawl_root_to_frame,
+)
+from onepiece.dftdataframe_import import (
+    crawl_root_to_hdf as backend_crawl_root_to_hdf,
+)
+from onepiece.qa import bundled_catalysis_hub_dataset
+from onepiece.sources import (
     apply_import_options as backend_apply_import_options,
 )
-from onepiece import (
-    bundled_catalysis_hub_dataset,
+from onepiece.sources import (
+    combined_active_database as backend_combined_active_database,
+)
+from onepiece.sources import (
     detect_source_profile,
     source_profile_summary,
 )
-from onepiece import (
-    combined_active_database as backend_combined_active_database,
-)
-from onepiece import crawl_root_to_frame as backend_crawl_root_to_frame
-from onepiece import crawl_root_to_hdf as backend_crawl_root_to_hdf
-from onepiece import (
+from onepiece.sources import (
     detected_gas_reference_values as backend_detected_gas_reference_values,
 )
-from onepiece import (
+from onepiece.sources import (
     map_adsorption_columns as backend_map_adsorption_columns,
 )
-from onepiece import (
+from onepiece.sources import (
     prepare_source_frame as backend_prepare_source_frame,
 )
-from onepiece import (
+from onepiece.sources import (
     read_hdf_path as backend_read_hdf_path,
 )
-from onepiece import (
+from onepiece.sources import (
     read_uploaded_hdf as backend_read_uploaded_hdf,
 )
-from onepiece import (
+from onepiece.sources import (
     restore_source_descriptors as backend_restore_source_descriptors,
 )
-from onepiece import (
+from onepiece.sources import (
     source_descriptors as backend_source_descriptors,
 )
-from onepiece import (
+from onepiece.sources import (
     store_source as backend_store_source,
+)
+from onepiece_studio.state import (
+    CRAWL_OUTPUT_HDF,
 )
 from onepiece_studio.ui.workbook import apply_session_edits, init_workbook_state
 
 SOURCE_STATE_KEY = "onepiece_studio_extra_hdf_sources"
 LAST_CRAWL_SUMMARY_KEY = "onepiece_studio_last_crawl_summary"
+
+
+def apply_data_sources(
+    st: Any,
+    base: pd.DataFrame,
+    source_name: str,
+    *,
+    source_path: str = "base",
+) -> pd.DataFrame:
+    """Build the active database from session state without rendering anything."""
+    _init_state(st)
+    init_workbook_state(st)
+    return apply_session_edits(st, _combined_active_database(st, base, source_name=source_name, source_path=source_path))
+
+
+def render_data_overview(
+    st: Any,
+    base: pd.DataFrame,
+    active: pd.DataFrame,
+    schema: list[Any],
+    *,
+    title: str,
+    source_name: str,
+    source_path: str = "base",
+) -> None:
+    """Render the Data page body: onboarding, source manager, and schema."""
+    st.title(title)
+    st.caption(f"{len(base):,} base records from {source_name}")
+    _render_session_onboarding(st, active)
+    render_data_source_manager(
+        st,
+        base,
+        source_name,
+        source_path=source_path,
+        expanded=active.empty,
+    )
+    with st.expander("Schema", expanded=False):
+        _render_schema(st, schema)
+
+
+def _render_session_onboarding(st: Any, dataframe: pd.DataFrame) -> None:
+    if not dataframe.empty:
+        return
+    with st.container(border=True):
+        st.markdown("**Welcome to OnePiece Studio**")
+        st.caption(
+            "This session is empty on purpose. Load the bundled tutorial dataset or your own HDF file from "
+            "`Data Sources`, then use `Workflow` to derive adsorption, Gibbs, charge, or geometry columns."
+        )
+        st.caption(
+            "Good first path for new catalysis users: 1) load the bundled tutorial dataset, "
+            "2) add `Adsorption + Gibbs analysis starter`, 3) inspect `Records`, 4) compare candidates in `Visualize`."
+        )
+
+
+def _render_schema(st: Any, schema: list[Any]) -> None:
+    rows = [
+        {
+            "column": column.name,
+            "kind": column.kind.value,
+            "nullable": column.nullable,
+            "unique_count": column.unique_count,
+            "sample": str(column.sample)[:160],
+        }
+        for column in schema
+    ]
+    st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch")
 
 
 def render_data_source_manager(
@@ -54,21 +128,22 @@ def render_data_source_manager(
     source_name: str,
     *,
     source_path: str = "base",
+    expanded: bool = False,
 ) -> pd.DataFrame:
     """Render session-level HDF source management and return the active database."""
     _init_state(st)
     init_workbook_state(st)
 
-    with st.expander("Data Sources", expanded=False):
+    with st.expander("Data Sources", expanded=expanded):
         st.caption(
             "Add local OnePiece/pandas HDF files to this session. Active sources are "
-            "merged before Workflow and Controlroom, so Controlroom filters define the "
-            "database used by the following tabs."
+            "merged before the Workflow and Filter steps, so your filters define the "
+            "database used by every other page."
         )
         _render_add_sources(st)
         _render_source_table(st, base, source_name, source_path=source_path)
 
-    return apply_session_edits(st, _combined_active_database(st, base, source_name=source_name, source_path=source_path))
+    return apply_data_sources(st, base, source_name, source_path=source_path)
 
 
 def _init_state(st: Any) -> None:
@@ -153,7 +228,7 @@ def _render_add_sources(st: Any) -> None:
             "Optional output HDF path",
             value="",
             placeholder="path/to/created_frame.hdf",
-            key="onepiece_studio_crawl_output_hdf",
+            key=CRAWL_OUTPUT_HDF,
         )
         st.caption(
             "Typical DFTDataFrame output columns include `Name`, `Formula`, `E`, `Path`, `struc`, "
@@ -289,7 +364,7 @@ def _suggest_crawled_hdf_path(root_text: str) -> str:
 
 
 def _set_crawl_output_hdf(session_state: Any, output_path: str) -> None:
-    session_state["onepiece_studio_crawl_output_hdf"] = output_path
+    session_state[CRAWL_OUTPUT_HDF] = output_path
 
 
 def _crawl_summary(

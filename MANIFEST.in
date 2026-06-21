@@ -3,8 +3,7 @@ include README.md
 include pyproject.toml
 graft src/onepiece
 graft tests
-prune src/onepiece_studio
-prune src/onepiece_studio.egg-info
+
 prune ui
 prune docs/build
 prune docs/reports

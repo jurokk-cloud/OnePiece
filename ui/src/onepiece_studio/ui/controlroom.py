@@ -1,24 +1,78 @@
+"""Filter page: build the active database view from the loaded rows.
+
+This module only renders. Filter application lives in
+:func:`onepiece_studio.adapters.apply_controlroom_filters`; the pure
+computation helpers (notebook commands, widget option discovery, display
+shaping) live in :mod:`onepiece_studio.filter_logic`.
+"""
+
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 from typing import Any
 
-import numpy as np
 import pandas as pd
 
-from onepiece.adsorption import get_all_elements, row_element_count_map, structure_columns_in_frame
-from onepiece.services import DatasetQuery, apply_dataset_query
-from onepiece.services import apply_materials_search as backend_apply_materials_search
-from onepiece.services import filter_any_token as backend_filter_any_token
-from onepiece.services import filter_text as backend_filter_text
-from onepiece.services import query_description as backend_query_description
-from onepiece_studio.materials_columns import column_context, profile_review
+from onepiece.adsorption import get_all_elements
+from onepiece.services import (
+    filter_text,
+    query_description,
+    row_atom_counts,
+    row_element_counts,
+)
+from onepiece_studio.adapters import (
+    apply_controlroom_filters,
+    ensure_controlroom_state,
+)
+from onepiece_studio.filter_logic import (
+    clamp_float,
+    display_command_frame,
+    facet_columns,
+    finite_values,
+    materials_property_columns,
+    name_options,
+    numeric_filter_columns,
+    quality_flag_options,
+    record_type_options,
+    run_command,
+    status_table,
+)
+from onepiece_studio.state import (
+    CONTROL_DROP_CONVERGENCE,
+    CONTROL_DROP_TEST,
+    CONTROL_FMAX_MAX,
+    CONTROL_MATERIAL_QUERY,
+    CONTROL_NUMERIC,
+    CONTROL_SELECTED_FACETS,
+    CONTROL_STATUS,
+    CONTROL_TEXT_EXCLUDE,
+    CONTROL_TEXT_INCLUDE,
+    CONTROL_USE_STATUS,
+    CONTROL_VISIBLE_STATES,
+    CONTROLROOM_ACTIVE_DATAFRAME,
+)
 from onepiece_studio.ui.row_actions import (
     render_action_grid,
-    row_keys,
+    selected_dataframe_index,
     selected_row_summary,
 )
+
+# Compatibility aliases: tests and scripts import these helpers from this
+# module even though the implementations moved to the split-out modules.
+__all__ = [
+    "ControlroomResult",
+    "apply_controlroom_filters",
+    "render_controlroom",
+    "_apply_controlroom_filters",
+    "_available_elements",
+    "_clamp_float",
+    "_filter_text",
+]
+
+_apply_controlroom_filters = apply_controlroom_filters
+_available_elements = get_all_elements
+_clamp_float = clamp_float
+_filter_text = filter_text
 
 
 @dataclass(frozen=True, slots=True)
@@ -28,12 +82,12 @@ class ControlroomResult:
 
 
 def render_controlroom(st: Any, dataframe: pd.DataFrame) -> ControlroomResult:
-    _init_state(st, dataframe)
+    ensure_controlroom_state(st, dataframe)
 
-    st.subheader("Controlroom")
+    st.subheader("Filter")
     st.caption(
-        "Build the active database view from local OnePiece/pandas rows. "
-        "The resulting filter is used by Records and Visualize."
+        "Build the active database view from your rows. "
+        "The resulting selection is used by Records, Visualize, and Analyze."
     )
 
     left, right = st.columns([0.34, 0.66], gap="large")
@@ -46,7 +100,7 @@ def render_controlroom(st: Any, dataframe: pd.DataFrame) -> ControlroomResult:
         _render_domain_filters(st, dataframe)
         _render_numeric_controls(st, dataframe)
 
-    active = _apply_controlroom_filters(st, dataframe)
+    active = apply_controlroom_filters(st, dataframe)
     with right:
         _render_control_summary(st, dataframe, active)
         _render_commands(st, active)
@@ -56,21 +110,6 @@ def render_controlroom(st: Any, dataframe: pd.DataFrame) -> ControlroomResult:
         dataframe=active,
         summary={"rows": len(active), "total_rows": len(dataframe)},
     )
-
-
-def _init_state(st: Any, dataframe: pd.DataFrame) -> None:
-    st.session_state.setdefault("onepiece_studio_control_text_include", "")
-    st.session_state.setdefault("onepiece_studio_control_text_exclude", "")
-    st.session_state.setdefault("onepiece_studio_control_use_status", True)
-    st.session_state.setdefault("onepiece_studio_control_status", {})
-    st.session_state.setdefault("onepiece_studio_control_selected_facets", {})
-    st.session_state.setdefault("onepiece_studio_control_numeric", {})
-    st.session_state.setdefault("onepiece_studio_control_material_query", {})
-    st.session_state.setdefault("onepiece_studio_control_fmax_max", None)
-    st.session_state.setdefault("onepiece_studio_control_drop_convergence", False)
-    st.session_state.setdefault("onepiece_studio_control_drop_test", False)
-    if "onepiece_studio_control_row_key" not in st.session_state:
-        st.session_state["onepiece_studio_control_row_key"] = _row_keys(dataframe)
 
 
 def _render_filter_presets(st: Any, dataframe: pd.DataFrame) -> None:
@@ -85,7 +124,7 @@ def _render_filter_presets(st: Any, dataframe: pd.DataFrame) -> None:
     if preset_columns[1].button("Ga rows", width="stretch"):
         _set_text_filter(st, include="Ga")
     if "fmax" in dataframe.columns and preset_columns[0].button("fmax ok", width="stretch"):
-        st.session_state["onepiece_studio_control_fmax_max"] = 0.05
+        st.session_state[CONTROL_FMAX_MAX] = 0.05
     if preset_columns[1].button("Needs review", width="stretch"):
         _set_status_filter(st, ["review"])
 
@@ -94,18 +133,18 @@ def _render_inclusion_editor(st: Any, dataframe: pd.DataFrame) -> None:
     with st.expander("Inclusion states", expanded=True):
         st.checkbox(
             "Use inclusion state",
-            key="onepiece_studio_control_use_status",
+            key=CONTROL_USE_STATUS,
             help="Rows marked excluded are removed from the active view.",
         )
         st.multiselect(
             "Visible states",
             ["included", "review", "reference", "excluded"],
             default=st.session_state.get(
-                "onepiece_studio_control_visible_states", ["included", "review", "reference"]
+                CONTROL_VISIBLE_STATES, ["included", "review", "reference"]
             ),
-            key="onepiece_studio_control_visible_states",
+            key=CONTROL_VISIBLE_STATES,
         )
-        row_options = _name_options(dataframe)
+        row_options = name_options(dataframe)
         selected = st.selectbox("Mark row", [""] + row_options, index=0)
         new_state = st.segmented_control(
             "Set state",
@@ -114,23 +153,23 @@ def _render_inclusion_editor(st: Any, dataframe: pd.DataFrame) -> None:
         )
         if st.button("Apply state", disabled=not selected, width="stretch"):
             key = selected.split(" | ", 1)[0]
-            st.session_state["onepiece_studio_control_status"][key] = new_state
+            st.session_state[CONTROL_STATUS][key] = new_state
 
-        status_table = _status_table(st, dataframe)
-        if not status_table.empty:
-            st.dataframe(status_table, hide_index=True, width="stretch", height=180)
+        states = status_table(st.session_state.get(CONTROL_STATUS, {}), dataframe)
+        if not states.empty:
+            st.dataframe(states, hide_index=True, width="stretch", height=180)
 
 
 def _render_name_filters(st: Any) -> None:
     with st.expander("Name / text filters", expanded=True):
         st.text_input(
             "Include text",
-            key="onepiece_studio_control_text_include",
+            key=CONTROL_TEXT_INCLUDE,
             placeholder="e.g. Cu-211 Ga clean",
         )
         st.text_input(
             "Exclude text",
-            key="onepiece_studio_control_text_exclude",
+            key=CONTROL_TEXT_EXCLUDE,
             placeholder="e.g. convergence test broken",
         )
 
@@ -142,8 +181,8 @@ def _render_materials_search(st: Any, dataframe: pd.DataFrame) -> None:
             "chemical system, element sets, composition size, structure size and "
             "property windows."
         )
-        query = st.session_state.setdefault("onepiece_studio_control_material_query", {})
-        elements = _available_elements(dataframe)
+        query = st.session_state.setdefault(CONTROL_MATERIAL_QUERY, {})
+        elements = get_all_elements(dataframe)
 
         formula_col, chemsys_col = st.columns(2)
         query["formula"] = formula_col.text_input(
@@ -195,13 +234,13 @@ def _render_materials_search(st: Any, dataframe: pd.DataFrame) -> None:
         )
         query["record_types"] = exclude_col.multiselect(
             "Record classes",
-            _record_type_options(dataframe),
+            record_type_options(dataframe),
             default=query.get("record_types", []),
             key="onepiece_studio_material_record_types",
         )
 
         size_cols = st.columns(3)
-        element_counts = _row_element_counts(dataframe)
+        element_counts = row_element_counts(dataframe)
         min_elements = int(max(0, element_counts.min())) if not dataframe.empty else 0
         max_elements = int(max(element_counts.max(), min_elements)) if not dataframe.empty else 0
         if max_elements > min_elements:
@@ -220,7 +259,7 @@ def _render_materials_search(st: Any, dataframe: pd.DataFrame) -> None:
             query["nelements"] = None
             size_cols[0].info("Only one element count available.")
 
-        atom_counts = _row_atom_counts(dataframe)
+        atom_counts = row_atom_counts(dataframe)
         if atom_counts.notna().any():
             min_atoms = int(max(1, atom_counts.dropna().min()))
             max_atoms = int(max(min_atoms, atom_counts.dropna().max()))
@@ -243,7 +282,7 @@ def _render_materials_search(st: Any, dataframe: pd.DataFrame) -> None:
             query["natoms"] = None
             size_cols[1].info("No atom-count information.")
 
-        quality_options = _quality_flag_options(dataframe)
+        quality_options = quality_flag_options(dataframe)
         query["quality_flags"] = size_cols[2].multiselect(
             "Quality flags",
             quality_options,
@@ -251,7 +290,7 @@ def _render_materials_search(st: Any, dataframe: pd.DataFrame) -> None:
             key="onepiece_studio_material_quality_flags",
         )
 
-        property_columns = _materials_property_columns(dataframe)
+        property_columns = materials_property_columns(dataframe)
         query["property_columns"] = st.multiselect(
             "Property windows",
             property_columns,
@@ -262,7 +301,7 @@ def _render_materials_search(st: Any, dataframe: pd.DataFrame) -> None:
         property_ranges = query.get("property_ranges", {})
         updated_ranges = {}
         for column in query["property_columns"]:
-            finite = _finite(pd.to_numeric(dataframe[column], errors="coerce"))
+            finite = finite_values(pd.to_numeric(dataframe[column], errors="coerce"))
             if finite.empty or finite.min() == finite.max():
                 continue
             default = property_ranges.get(column, (float(finite.min()), float(finite.max())))
@@ -278,30 +317,29 @@ def _render_materials_search(st: Any, dataframe: pd.DataFrame) -> None:
             )
         query["property_ranges"] = updated_ranges
 
-        st.code(_query_description(query), language="text")
+        st.code(query_description(query), language="text")
 
 
 def _render_domain_filters(st: Any, dataframe: pd.DataFrame) -> None:
     with st.expander("Materials facets", expanded=True):
         selected: dict[str, list[str]] = {}
-        facet_columns = _facet_columns(dataframe)
-        for column in facet_columns:
+        for column in facet_columns(dataframe):
             options = sorted(dataframe[column].dropna().astype(str).unique().tolist())
-            current = st.session_state["onepiece_studio_control_selected_facets"].get(column, [])
+            current = st.session_state[CONTROL_SELECTED_FACETS].get(column, [])
             selected[column] = st.multiselect(column, options, default=current)
-        st.session_state["onepiece_studio_control_selected_facets"] = selected
+        st.session_state[CONTROL_SELECTED_FACETS] = selected
 
-        st.checkbox("Hide convergence calculations by name", key="onepiece_studio_control_drop_convergence")
-        st.checkbox("Hide test calculations by name", key="onepiece_studio_control_drop_test")
+        st.checkbox("Hide convergence calculations by name", key=CONTROL_DROP_CONVERGENCE)
+        st.checkbox("Hide test calculations by name", key=CONTROL_DROP_TEST)
 
 
 def _render_numeric_controls(st: Any, dataframe: pd.DataFrame) -> None:
     with st.expander("Numeric filters", expanded=False):
         if "fmax" in dataframe.columns and pd.api.types.is_numeric_dtype(dataframe["fmax"]):
-            finite = _finite(dataframe["fmax"])
+            finite = finite_values(dataframe["fmax"])
             if not finite.empty:
-                default_value = _clamp_float(
-                    st.session_state.get("onepiece_studio_control_fmax_max"),
+                default_value = clamp_float(
+                    st.session_state.get(CONTROL_FMAX_MAX),
                     minimum=float(finite.min()),
                     maximum=float(finite.max()),
                     fallback=float(finite.max()),
@@ -313,20 +351,20 @@ def _render_numeric_controls(st: Any, dataframe: pd.DataFrame) -> None:
                     value=default_value,
                     step=0.01,
                 )
-                st.session_state["onepiece_studio_control_fmax_max"] = value
+                st.session_state[CONTROL_FMAX_MAX] = value
 
-        numeric_columns = _numeric_filter_columns(dataframe)
+        numeric_columns = numeric_filter_columns(dataframe)
         selected = st.multiselect(
             "Additional numeric columns",
             numeric_columns,
-            default=list(st.session_state["onepiece_studio_control_numeric"].keys()),
+            default=list(st.session_state[CONTROL_NUMERIC].keys()),
         )
         numeric_state: dict[str, tuple[float, float]] = {}
         for column in selected:
-            finite = _finite(dataframe[column])
+            finite = finite_values(dataframe[column])
             if finite.empty or finite.min() == finite.max():
                 continue
-            default = st.session_state["onepiece_studio_control_numeric"].get(
+            default = st.session_state[CONTROL_NUMERIC].get(
                 column, (float(finite.min()), float(finite.max()))
             )
             numeric_state[column] = st.slider(
@@ -338,15 +376,7 @@ def _render_numeric_controls(st: Any, dataframe: pd.DataFrame) -> None:
                     min(float(finite.max()), float(default[1])),
                 ),
             )
-        st.session_state["onepiece_studio_control_numeric"] = numeric_state
-
-
-def _clamp_float(value: Any, *, minimum: float, maximum: float, fallback: float) -> float:
-    try:
-        numeric = float(value)
-    except (TypeError, ValueError):
-        numeric = float(fallback)
-    return min(maximum, max(minimum, numeric))
+        st.session_state[CONTROL_NUMERIC] = numeric_state
 
 
 def _render_control_summary(st: Any, source: pd.DataFrame, active: pd.DataFrame) -> None:
@@ -382,7 +412,7 @@ def _render_commands(st: Any, dataframe: pd.DataFrame) -> None:
         ],
     )
 
-    result = _run_command(command, dataframe)
+    result = run_command(command, dataframe)
     if command == "Export active rows":
         csv = dataframe.to_csv(index=False).encode("utf-8")
         st.download_button(
@@ -394,7 +424,7 @@ def _render_commands(st: Any, dataframe: pd.DataFrame) -> None:
         )
     else:
         command_height = 520 if command == "Show active DataFrame" else 300
-        display = _display_command_frame(result)
+        display = display_command_frame(result)
         event = st.dataframe(
             display,
             hide_index=True,
@@ -404,7 +434,7 @@ def _render_commands(st: Any, dataframe: pd.DataFrame) -> None:
             on_select="rerun",
             key=f"onepiece_studio_command_table_{command}",
         )
-        selected_index = _selected_dataframe_index(event, display)
+        selected_index = selected_dataframe_index(event, display)
         if selected_index is not None and selected_index in result.index:
             _render_row_actions(st, result.loc[selected_index], selected_index, key_prefix="command")
 
@@ -412,7 +442,7 @@ def _render_commands(st: Any, dataframe: pd.DataFrame) -> None:
 def _render_preview(st: Any, dataframe: pd.DataFrame) -> None:
     st.markdown("**Active DataFrame**")
     st.caption(f"{len(dataframe):,} active rows")
-    display = _display_command_frame(dataframe)
+    display = display_command_frame(dataframe)
     event = st.dataframe(
         display,
         hide_index=True,
@@ -420,26 +450,11 @@ def _render_preview(st: Any, dataframe: pd.DataFrame) -> None:
         height=640,
         selection_mode="single-row",
         on_select="rerun",
-        key="onepiece_studio_controlroom_active_dataframe",
+        key=CONTROLROOM_ACTIVE_DATAFRAME,
     )
-    selected_index = _selected_dataframe_index(event, display)
+    selected_index = selected_dataframe_index(event, display)
     if selected_index is not None and selected_index in dataframe.index:
         _render_row_actions(st, dataframe.loc[selected_index], selected_index, key_prefix="active")
-
-
-def _selected_dataframe_index(event: Any, display: pd.DataFrame) -> Any | None:
-    selection = getattr(event, "selection", None)
-    if selection is None and isinstance(event, dict):
-        selection = event.get("selection")
-    rows = getattr(selection, "rows", None)
-    if rows is None and isinstance(selection, dict):
-        rows = selection.get("rows")
-    if not rows:
-        return None
-    position = int(rows[0])
-    if position >= len(display):
-        return None
-    return display.index[position]
 
 
 def _render_row_actions(st: Any, row: pd.Series, index: Any, *, key_prefix: str) -> None:
@@ -448,422 +463,22 @@ def _render_row_actions(st: Any, row: pd.Series, index: Any, *, key_prefix: str)
     render_action_grid(st, row, index, key_prefix=key_prefix, namespace="onepiece_studio_control")
 
 
-def _apply_controlroom_filters(st: Any, dataframe: pd.DataFrame) -> pd.DataFrame:
-    query = DatasetQuery(
-        text_include=st.session_state.get("onepiece_studio_control_text_include", ""),
-        text_exclude=st.session_state.get("onepiece_studio_control_text_exclude", ""),
-        drop_convergence=bool(st.session_state.get("onepiece_studio_control_drop_convergence", True)),
-        drop_test=bool(st.session_state.get("onepiece_studio_control_drop_test", True)),
-        materials=dict(st.session_state.get("onepiece_studio_control_material_query", {})),
-        selected_facets=dict(st.session_state.get("onepiece_studio_control_selected_facets", {})),
-        fmax_max=st.session_state.get("onepiece_studio_control_fmax_max"),
-        numeric_ranges=dict(st.session_state.get("onepiece_studio_control_numeric", {})),
-        use_status=bool(st.session_state.get("onepiece_studio_control_use_status", True)),
-        visible_states=list(st.session_state.get("onepiece_studio_control_visible_states", ["included", "review", "reference"])),
-    )
-    return apply_dataset_query(
-        dataframe,
-        query,
-        row_key_series=_row_keys(dataframe),
-        status_map=st.session_state.get("onepiece_studio_control_status", {}),
-    )
-
-
-def _run_command(command: str, dataframe: pd.DataFrame) -> pd.DataFrame:
-    if dataframe.empty:
-        return dataframe
-    if command == "Show active DataFrame":
-        return dataframe
-    if command == "Top low-energy candidates":
-        energy = _first_existing(
-            dataframe,
-            ["form_G_per_Area", "formation_energy_per_atom", "form_G_per_alloy", "E"],
-        )
-        if energy:
-            return dataframe.sort_values(energy).head(40)
-    if command == "Find clean reference rows":
-        return _filter_text(dataframe, "clean", include=True).head(80)
-    if command == "Find adsorption-like rows":
-        tokens = ["CO", "CO2", "H2O", "OH", "O2", "H2", "ads"]
-        return _filter_any_token(dataframe, tokens).head(80)
-    if command == "Find quality problems":
-        problems = dataframe.iloc[0:0].copy()
-        if "fmax" in dataframe.columns and pd.api.types.is_numeric_dtype(dataframe["fmax"]):
-            problems = pd.concat([problems, dataframe[dataframe["fmax"] > 0.05]])
-        problems = pd.concat([problems, _filter_text(dataframe, "crash error fail", include=True)])
-        return problems.loc[~problems.index.duplicated(keep="first")].head(80)
-    if command == "Phase-diagram candidate table":
-        columns = [
-            c
-            for c in [
-                "dataset",
-                "source_hdf",
-                "source_row",
-                "Name",
-                "Formula",
-                "Ga_percent",
-                "Monolayer_alloy",
-                "hkl",
-                "E",
-                "formation_energy_per_atom",
-                "form_G_per_Area",
-                "form_G_per_alloy",
-                "fmax",
-            ]
-            if c in dataframe.columns
-        ]
-        return dataframe[columns].head(120)
-    if command == "Column focus review":
-        return profile_review(dataframe)
-    if command == "Column context table":
-        return column_context(dataframe)
-    return dataframe
-
-
-def _filter_text(dataframe: pd.DataFrame, text: str, *, include: bool) -> pd.DataFrame:
-    return backend_filter_text(dataframe, text, include=include)
-
-
-def _filter_any_token(dataframe: pd.DataFrame, tokens: list[str]) -> pd.DataFrame:
-    return backend_filter_any_token(dataframe, tokens)
-
-
-def _search_haystack(dataframe: pd.DataFrame) -> pd.Series:
-    text_columns = [
-        column
-        for column in ["dataset", "dataset_label", "Name", "Formula", "legend"]
-        if column in dataframe.columns
-    ]
-    haystack = pd.Series("", index=dataframe.index, dtype="object")
-    for column in text_columns:
-        haystack = haystack + " " + dataframe[column].astype(str)
-
-    for column in ["Path", "path", "source_hdf"]:
-        if column in dataframe.columns:
-            haystack = haystack + " " + dataframe[column].astype(str).map(_path_tail)
-
-    if not text_columns and all(column not in dataframe.columns for column in ["Path", "path", "source_hdf"]):
-        fallback = [column for column in dataframe.columns if dataframe[column].dtype == "object"][:8]
-        for column in fallback:
-            haystack = haystack + " " + dataframe[column].astype(str)
-    return haystack
-
-
-def _path_tail(value: Any) -> str:
-    text = str(value or "")
-    if not text:
-        return ""
-    parts = re.split(r"[\\/]", text)
-    if not parts:
-        return text
-    tail = parts[-1]
-    parent = parts[-2] if len(parts) > 1 else ""
-    return f"{parent} {tail}".strip()
-
-
-def _apply_materials_search(dataframe: pd.DataFrame, query: dict[str, Any]) -> pd.DataFrame:
-    return backend_apply_materials_search(dataframe, query)
-
-
-def _available_elements(dataframe: pd.DataFrame) -> list[str]:
-    return get_all_elements(dataframe)
-
-
-def _row_elements(dataframe: pd.DataFrame) -> pd.Series:
-    structure_columns = tuple(structure_columns_in_frame(dataframe))
-    return dataframe.apply(
-        lambda row: tuple(sorted(row_element_count_map(row, structure_columns=structure_columns))),
-        axis=1,
-    )
-
-
-def _row_element_counts(dataframe: pd.DataFrame) -> pd.Series:
-    return _row_elements(dataframe).map(len)
-
-
-def _row_atom_counts(dataframe: pd.DataFrame) -> pd.Series:
-    if "n_atoms" in dataframe.columns:
-        return pd.to_numeric(dataframe["n_atoms"], errors="coerce")
-    structure_columns = tuple(structure_columns_in_frame(dataframe))
-    counts_by_row = dataframe.apply(
-        lambda row: row_element_count_map(row, structure_columns=structure_columns),
-        axis=1,
-    )
-    if not counts_by_row.empty:
-        return counts_by_row.map(lambda counts: float(sum(counts.values())) if counts else np.nan)
-    return pd.Series(np.nan, index=dataframe.index)
-
-
-def _formula_counts(value: Any) -> dict[str, int]:
-    if value is None:
-        return {}
-    text = str(value)
-    if not text or text == "0":
-        return {}
-    counts: dict[str, int] = {}
-    for element, number in re.findall(r"([A-Z][a-z]?)(\d*)", text):
-        counts[element] = counts.get(element, 0) + int(number or 1)
-    return counts
-
-
-def _anonymous_formula(value: Any) -> str:
-    counts = _formula_counts(value)
-    if not counts:
-        return ""
-    ordered_counts = sorted(counts.values())
-    letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-    parts = []
-    for index, count in enumerate(ordered_counts):
-        suffix = "" if count == 1 else str(count)
-        parts.append(f"{letters[index]}{suffix}")
-    return "".join(parts)
-
-
-def _normalize_anonymous_formula(value: str) -> str:
-    counts = []
-    for _element, number in re.findall(r"([A-Z])(\d*)", str(value).upper()):
-        counts.append(int(number or 1))
-    letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-    return "".join(f"{letters[index]}{'' if count == 1 else count}" for index, count in enumerate(sorted(counts)))
-
-
-def _parse_element_tokens(value: Any) -> list[str]:
-    text = str(value).replace("-", " ").replace(",", " ")
-    return [token for token in text.split() if _looks_like_element(token)]
-
-
-def _looks_like_element(value: Any) -> bool:
-    return bool(re.fullmatch(r"[A-Z][a-z]?", str(value)))
-
-
-def _record_type_options(dataframe: pd.DataFrame) -> list[str]:
-    return sorted(_record_type_series(dataframe).dropna().unique().tolist())
-
-
-def _record_type_series(dataframe: pd.DataFrame) -> pd.Series:
-    text = pd.Series("", index=dataframe.index)
-    for column in ["Name", "Path", "dataset", "dataset_label"]:
-        if column in dataframe.columns:
-            text = text + " " + dataframe[column].astype(str)
-    lower = text.str.lower()
-    labels = pd.Series("calculation", index=dataframe.index)
-    labels[lower.str.contains("gasphase|gas/", regex=True, na=False)] = "gas_reference"
-    labels[lower.str.contains("clean", regex=False, na=False)] = "clean_surface"
-    labels[lower.str.contains("co|ch3o|hco|co2|oh", regex=True, na=False)] = "adsorbate"
-    labels[lower.str.contains("copt", regex=False, na=False)] = "constrained_optimization"
-    if "record_type" in dataframe.columns:
-        explicit = dataframe["record_type"].astype("string").str.strip()
-        has_explicit = explicit.notna() & ~explicit.str.lower().isin(["", "nan", "none", "nat"])
-        labels.loc[has_explicit] = explicit.loc[has_explicit].astype(str)
-    return labels
-
-
-def _quality_flag_options(dataframe: pd.DataFrame) -> list[str]:
-    if "quality_flag" not in dataframe.columns:
-        return []
-    return sorted(dataframe["quality_flag"].dropna().astype(str).unique().tolist())
-
-
-def _range_is_restrictive(values: pd.Series, bounds: Any) -> bool:
-    if not bounds:
-        return False
-    finite = _finite(pd.to_numeric(values, errors="coerce"))
-    if finite.empty:
-        return False
-    lower, upper = float(bounds[0]), float(bounds[1])
-    return lower > float(finite.min()) or upper < float(finite.max())
-
-
-def _materials_property_columns(dataframe: pd.DataFrame) -> list[str]:
-    preferred = [
-        "energy_above_hull",
-        "e_above_hull",
-        "stability",
-        "delta_e",
-        "formation_energy_per_atom",
-        "form_G_per_Area",
-        "form_G_per_alloy",
-        "energy_per_atom",
-        "E",
-        "band_gap",
-        "density",
-        "volume",
-        "Volume",
-        "Area",
-        "fmax",
-        "n_atoms",
-        "Ga_percent",
-        "Monolayer_alloy",
-    ]
-    numeric = [column for column in dataframe.columns if pd.api.types.is_numeric_dtype(dataframe[column])]
-    ordered = [column for column in preferred if column in numeric]
-    ordered.extend([column for column in numeric if column not in ordered])
-    return ordered[:40]
-
-
-def _query_description(query: dict[str, Any]) -> str:
-    return backend_query_description(query)
-
-
 def _reset_filters(st: Any) -> None:
-    st.session_state["onepiece_studio_control_text_include"] = ""
-    st.session_state["onepiece_studio_control_text_exclude"] = ""
-    st.session_state["onepiece_studio_control_selected_facets"] = {}
-    st.session_state["onepiece_studio_control_numeric"] = {}
-    st.session_state["onepiece_studio_control_material_query"] = {}
-    st.session_state["onepiece_studio_control_fmax_max"] = None
-    st.session_state["onepiece_studio_control_visible_states"] = ["included", "review", "reference"]
-    st.session_state["onepiece_studio_control_drop_convergence"] = False
-    st.session_state["onepiece_studio_control_drop_test"] = False
+    st.session_state[CONTROL_TEXT_INCLUDE] = ""
+    st.session_state[CONTROL_TEXT_EXCLUDE] = ""
+    st.session_state[CONTROL_SELECTED_FACETS] = {}
+    st.session_state[CONTROL_NUMERIC] = {}
+    st.session_state[CONTROL_MATERIAL_QUERY] = {}
+    st.session_state[CONTROL_FMAX_MAX] = None
+    st.session_state[CONTROL_VISIBLE_STATES] = ["included", "review", "reference"]
+    st.session_state[CONTROL_DROP_CONVERGENCE] = False
+    st.session_state[CONTROL_DROP_TEST] = False
 
 
 def _set_text_filter(st: Any, *, include: str = "", exclude: str = "") -> None:
-    st.session_state["onepiece_studio_control_text_include"] = include
-    st.session_state["onepiece_studio_control_text_exclude"] = exclude
+    st.session_state[CONTROL_TEXT_INCLUDE] = include
+    st.session_state[CONTROL_TEXT_EXCLUDE] = exclude
 
 
 def _set_status_filter(st: Any, states: list[str]) -> None:
-    st.session_state["onepiece_studio_control_visible_states"] = states
-
-
-def _facet_columns(dataframe: pd.DataFrame) -> list[str]:
-    preferred = [
-        "dataset",
-        "source_hdf",
-        "hkl",
-        "slabsize",
-        "layers",
-        "cluster",
-        "convergence",
-        "clean",
-        "adsorbate",
-        "adsorbate_species",
-        "Surface Alloy",
-        "M",
-        "MO",
-    ]
-    columns = []
-    for column in preferred:
-        if column in dataframe.columns and _safe_unique_count(dataframe[column]) <= 80:
-            columns.append(column)
-    return columns[:10]
-
-
-def _numeric_filter_columns(dataframe: pd.DataFrame) -> list[str]:
-    preferred = [
-        "E",
-        "fmax",
-        "formation_energy_per_atom",
-        "form_G_per_Area",
-        "form_G_per_alloy",
-        "Ga_percent",
-        "Monolayer_alloy",
-        "Area",
-        "Ga",
-        "Cu",
-        "O",
-        "H",
-        "C",
-    ]
-    return [
-        column
-        for column in preferred
-        if column in dataframe.columns and pd.api.types.is_numeric_dtype(dataframe[column])
-    ]
-
-
-def _name_options(dataframe: pd.DataFrame) -> list[str]:
-    rows = []
-    keys = _row_keys(dataframe)
-    for index, row in dataframe.head(500).iterrows():
-        name = str(row.get("Name", index))
-        dataset = str(row.get("dataset", ""))
-        rows.append(f"{keys.loc[index]} | {dataset} | {name}")
-    return rows
-
-
-def _row_keys(dataframe: pd.DataFrame) -> pd.Series:
-    return row_keys(dataframe)
-
-
-def _status_table(st: Any, dataframe: pd.DataFrame) -> pd.DataFrame:
-    status = st.session_state.get("onepiece_studio_control_status", {})
-    if not status:
-        return pd.DataFrame()
-    rows = []
-    key_to_index = {key: index for index, key in _row_keys(dataframe).items()}
-    for key, state in status.items():
-        index = key_to_index.get(key)
-        row = dataframe.loc[index] if index is not None else {}
-        rows.append(
-            {
-                "row_key": key,
-                "state": state,
-                "dataset": row.get("dataset", "") if hasattr(row, "get") else "",
-                "Name": row.get("Name", "") if hasattr(row, "get") else "",
-            }
-        )
-    return pd.DataFrame(rows)
-
-
-def _display_command_frame(dataframe: pd.DataFrame) -> pd.DataFrame:
-    visible = dataframe.copy()
-    priority = [
-        "dataset",
-        "source_hdf",
-        "source_row",
-        "Name",
-        "Formula",
-        "E",
-        "fmax",
-        "formation_energy_per_atom",
-        "form_G_per_Area",
-        "form_G_per_alloy",
-        "hkl",
-        "slabsize",
-        "Monolayer_alloy",
-        "Ga",
-        "Cu",
-        "O",
-        "Path",
-    ]
-    ordered = [column for column in priority if column in visible.columns]
-    ordered.extend([column for column in visible.columns if column not in ordered])
-    visible = visible[ordered]
-    for column in visible.columns:
-        if visible[column].dtype == "object":
-            visible[column] = visible[column].map(_short_value)
-    return visible
-
-
-def _short_value(value: Any) -> Any:
-    if value is None:
-        return None
-    try:
-        missing = pd.isna(value)
-        if isinstance(missing, bool) and missing:
-            return None
-    except (TypeError, ValueError):
-        pass
-    text = str(value)
-    if isinstance(text, str) and len(text) > 180:
-        return text[:177] + "..."
-    return text
-
-
-def _finite(series: pd.Series) -> pd.Series:
-    return series.replace([np.inf, -np.inf], np.nan).dropna()
-
-
-def _first_existing(dataframe: pd.DataFrame, columns: list[str]) -> str | None:
-    for column in columns:
-        if column in dataframe.columns and pd.api.types.is_numeric_dtype(dataframe[column]):
-            return column
-    return None
-
-
-def _safe_unique_count(series: pd.Series) -> int:
-    try:
-        return int(series.nunique(dropna=True))
-    except TypeError:
-        return int(series.dropna().map(repr).nunique(dropna=True))
+    st.session_state[CONTROL_VISIBLE_STATES] = states

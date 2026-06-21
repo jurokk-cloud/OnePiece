@@ -5,7 +5,7 @@ These logos are designed as a small family for the two local packages:
 - **OnePiece**: the atomistic data core for structures, energies and provenance
 - **OnePiece Studio**: the local materials workbench for filtering, phase diagrams and row tracing
 
-They use the project font stack with `Lucifer` as the first choice.
+They use the project font stack with system font stack as the first choice.
 
 ## OnePiece Studio
 
