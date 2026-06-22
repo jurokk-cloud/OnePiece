@@ -95,6 +95,28 @@ suite) and a skeptical evaluator session — all three passed.
 All three tasks executed by the harness, each evaluator-PASSed; suite grew
 156 → 308 tests, ruff clean throughout.
 
+## Phase 5 — completed 2026-06-11
+
+1. `6ca22fa` Docs landing page restructured into three audience-based tracks:
+   "Use the App" (UI), "Work in Python" (notebook), "Learn the Concepts"
+   (thesis). All 24 content pages sit in exactly one toctree — no orphans.
+   Sphinx build stays warning-free.
+2. `c56d52d` `verify.sh` now also builds the docs with `sphinx -W`; a new
+   `tests/test_docs_structure.py` asserts exactly three named tracks in
+   `index.md`; `.gitignore` updated to track harness tooling properly.
+3. `f98021d` Quickstart (tutorial.md) rewritten against the Phase 2 welcome
+   flow — starts from bare `onepiece-studio`, uses shipped navigation names
+   (Data / Explore / Analyze / Advanced, "Filter" not "Controlroom"), removes
+   stale subcommand-first launch modes.
+4. `1396516` Troubleshooting consolidated into one page covering doctor/qa
+   self-checks, wrong path, wrong HDF key, missing optional deps (PyTables /
+   sympy), legacy NumPy-1 pickles, and the NTFS/exFAT venv stall. Scattered
+   fragments in other pages replaced with links; `myst_heading_anchors` enabled
+   so section-level links resolve under the `sphinx -W` gate.
+
+All four tasks executed by the harness, each evaluator-PASSed; suite 308 → 335
+tests, docs build warning-free throughout.
+
 ## Audit findings
 
 ### Backend (`src/onepiece`, ~10k lines)
